@@ -1,0 +1,44 @@
+{
+  "NotoSans-Bold.ttf": {
+    "sha256": "1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913",
+    "source": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSans/hinted/ttf/"
+  },
+  "NotoSans-Regular.ttf": {
+    "sha256": "478c558ea716033cd60c03438f628dfa75694dcf6b5f6d505a2f05fd2b4f3823",
+    "source": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSans/hinted/ttf/"
+  },
+  "NotoSansMono-Bold.ttf": {
+    "sha256": "a21ea0ba6ea49fda7b34ca39a504b487f1130885d36e1a4f9f4255b3ba6994bc",
+    "source": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansMono/hinted/ttf/"
+  },
+  "NotoSansMono-Regular.ttf": {
+    "sha256": "65b5e2b2c4a1fba9ae8be1f026cb35b03dcb8886d9b2a4147054fde12f7e767d",
+    "source": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoSansMono/hinted/ttf/"
+  },
+  "NotoSansMonoCJKsc-Bold.otf": {
+    "member": "NotoSansMonoCJKsc-Bold.otf",
+    "sha256": "a452fedfc0619e43e080b7b861ce34cbd3ec4fbcea495bf8c402a5a02a5dcbdc",
+    "source": "https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/13_NotoSansMonoCJKsc.zip"
+  },
+  "NotoSansMonoCJKsc-Regular.otf": {
+    "member": "NotoSansMonoCJKsc-Regular.otf",
+    "sha256": "ec04cc376b34887cedbdf84074e2e226ed2761eeabdcb9173fc1dd7bfd153ef7",
+    "source": "https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/13_NotoSansMonoCJKsc.zip"
+  },
+  "NotoSansSC-Bold.otf": {
+    "member": "NotoSansSC-Bold.otf",
+    "sha256": "c6cb5a93abaa9edc8ee7463b7ebb7f42d618d40e6ed2f7a5371c97b0b64767c0",
+    "source": "https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/18_NotoSansSC.zip"
+  },
+  "NotoSansSC-Regular.otf": {
+    "member": "NotoSansSC-Regular.otf",
+    "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+    "source": "https://github.com/notofonts/noto-cjk/releases/download/Sans2.004/18_NotoSansSC.zip"
+  },
+  "OFL-NotoSans.txt": {
+    "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+  },
+  "OFL-NotoSansMono.txt": {
+    "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+  }
+}

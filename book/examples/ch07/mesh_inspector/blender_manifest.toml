@@ -1,0 +1,19 @@
+schema_version = "1.0.0"
+
+id = "mesh_inspector"
+version = "1.0.0"
+name = "Mesh Inspector"
+tagline = "Inspect mesh geometry for common modeling problems"
+maintainer = "Blender Development Guide"
+type = "add-on"
+
+blender_version_min = "5.2.0"
+
+license = [
+  "SPDX:GPL-2.0-or-later",
+]
+
+tags = ["Mesh", "Modeling"]
+
+[permissions]
+files = "Write inspection reports selected by the user"

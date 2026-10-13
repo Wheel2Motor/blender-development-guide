@@ -1,0 +1,91 @@
+# ============================================================================
+# 《Blender 开发指南》—— 版本控制排除规则
+#
+# 原则：**构建产物**与**可重新拉取 / 下载的代码和数据**都不入库。
+# 仓库里只保留长期维护的内容：章节源码、cetz 图定义、图片资源、项目文档和稳定工具。
+# ============================================================================
+
+# ---- 一、可拉取的源码与预编译库 ----
+# 固定基准的 Blender 源码（约 7 GB）与 lib/ 预编译库。重新拉取很久，所以保留在磁盘上
+# 供核对与截图使用，但不入库。需要时：init-blender.bat / ./init-blender.sh
+/blender/
+/lib/
+
+# ---- 二、编译产物（cmake / ninja）----
+# 含 build-blender 生成的 CMake/Visual Studio 工程与 blender.exe；重建一次要几小时。
+# 截图需要它，但同样不入库。
+/build_*/
+/build/
+
+# ---- 三、文档构建产物 ----
+# 整本书的 PDF 与逐页渲染图都在这里，每次构建都会变，**不入库**。
+# 要 PDF 直接跑 build-book.bat（输出路径是 book/build/）：
+#   build-book.bat   /   ./build-book.sh
+book/build/
+# 面向读者的发布目录由 tools/build_book_release.py 重建；顶层只含 PDF 与 examples/。
+/dist/
+# 注意：`book/res/` 是书稿资源（书中插图与截图原图），**要入库**，不要在这里忽略它。
+# 各章 / 各图单独编译出的 PDF（排查排版用的脚手架）
+book/chapters/*.pdf
+book/figures/*.pdf
+
+# ---- 三之二、书稿字体：只忽略二进制，许可与清单入库 ----
+# 字体二进制很大（约 50 MB：Noto Sans SC 两份 OTF + Noto Sans Mono CJK SC 两份 OTF），
+# 而且都是官方产物、可重新下载，所以**不入库**。构建要用它们才能不看系统字体：
+#   python tools/init_book.py      # 下载 + 校验（幂等，已存在且校验通过就跳过）
+#
+# 但下面这些**要入库**：
+#   * LICENSE-*.txt / OFL-*.txt —— OFL 要求分发时保留版权与许可声明，只有几 KB；
+#   * .manifest.json            —— 记录每个字体的 sha256 与来源 URL，
+#                                  是"字体从哪来、如何校验"的可复现依据。
+# 所以这里只忽略二进制扩展名，不要写成整目录 `book/fonts/`。
+book/fonts/*.ttf
+book/fonts/*.otf
+book/fonts/*.ttc
+book/fonts/*.otc
+
+# ---- 四、可选的本地工具链固定位置（脚本只"查找"，从不下载）----
+# 工程**不下载任何 CLI 工具**：Typst 请你自己装到 PATH 上。这个目录只是给
+# "想钉住某一版 Typst"的人放二进制用的 —— tools/init_book.py 与 tools/build_book.py
+# 会先在 tools/bin/typst[.exe] 查找，找不到就去 PATH 找；再找不到就报错、打印官方
+# 安装方式并以非零退出码结束。脚本**不会**往这里写任何东西。
+tools/bin/
+
+# ---- 五、可重新生成的运行时数据 ----
+# 截图采集时临时安装示例插件的用户脚本目录、采集进度与诊断文件。
+# 插件源码在 tools/example_addon/（入库），这里只是运行时被复制过去的副本。
+tools/_user_scripts/
+tools/_tmp*
+tools/_area_dump.txt
+tools/_capture_progress.txt
+
+# ---- 六、qa/ 临时输出 ----
+# qa/ 只保留可重复运行、无中间状态的检查器。检查报告、转储与截图不得归档；
+# 如确需临时保存输出，放在 qa/output/ 或使用以下被忽略的格式。
+qa/output/
+qa/**/*.json
+qa/**/*.txt
+qa/**/*.png
+qa/**/*.md
+
+# ---- 七、临时文件 ----
+_tmp*
+*.tmp
+~$*
+*.bak
+
+# ---- 八、Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# ---- 九、编辑器 / 操作系统 ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
