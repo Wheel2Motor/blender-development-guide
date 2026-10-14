@@ -41,17 +41,16 @@ Typst 从 `common.typ` 读取该 JSON 并导出 `blender-version`、`blender-bra
 在工程根目录运行：
 
 ```bash
-init-blender.bat         # Windows
-./init-blender.sh        # macOS / Linux
+scons init-blender
 ```
 
-入口脚本调用 `tools/init_blender.py`，负责：
+SCons alias 调用 `tools/init_blender.py`，负责：
 
 - 在 `blender/` 缺失时克隆固定分支并检出基准 commit；
 - 在 Linux/macOS 上初始化官方要求于构建前额外准备的 Git LFS 预编译库子模块；
 - 在 Windows 上不重复拉取平台库，保留 Blender 上游 `make.bat` 的自动检测和懒下载；
 - 检查 Git、Git LFS、CMake、Ninja 和编译器；
-- 打印调用 `build-blender.bat` / `.sh` 的下一步命令。
+- 打印调用 `scons build-blender` 的下一步命令。
 
 源码克隆、基准提交获取，以及需要额外执行的子模块初始化和 Git LFS 下载由这一份
 跨平台 Python 逻辑统一执行。Windows 平台库属于上游构建脚本能自行处理的情况，
@@ -64,6 +63,8 @@ init-blender.bat         # Windows
 
 ```bash
 python tools/init_blender.py --check-only
+# 或
+scons init-blender --check-only
 ```
 
 需要临时使用其他源码目录时，可以传入 `--src`；这不会改变项目默认约定：
@@ -80,8 +81,7 @@ python qa/check_source_refs.py --source "D:/src/blender"
 初始化成功后，在工程根目录运行：
 
 ```bash
-build-blender.bat         # Windows
-./build-blender.sh        # macOS / Linux
+scons build-blender
 ```
 
 `build-blender` 项目包装层只读核验源码提交和已有的 `lib/<平台>_<架构>`，
@@ -104,14 +104,14 @@ Ninja，找不到 Ninja
 常用参数：
 
 ```bash
-build-blender.bat --configure-only
-build-blender.bat --config Debug
-build-blender.bat --build-dir "D:/build/blender"
-./build-blender.sh --jobs 12
+scons build-blender --configure-only
+scons build-blender --blender-config=Debug
+scons build-blender --build-dir="D:/build/blender"
+scons build-blender -j 12
 ```
 
 默认拒绝构建与 `book/blender-baseline.json` 不同的提交；只有明确进行本地版本实验时才传
-`--allow-other-revision`。脚本不会自动删除或清理已有构建目录；生成器或编译器改变导致
+`scons build-blender --allow-other-revision`。脚本不会自动删除或清理已有构建目录；生成器或编译器改变导致
 CMake 缓存冲突时，应改用新的 `--build-dir`，不要让自动化擅自删除本地构建结果。
 
 构建产物、源码检出和预编译库均不应提交到本仓库。

@@ -5,15 +5,16 @@
 做四件事：
 
 1. 找 Typst（PATH 或 ``tools/bin/``）、打印版本；
-2. 把**书稿需要的字体下载进** ``book/fonts/``（该目录不入版本控制），
-   并校验每个文件确实是字体、族名正确、覆盖书稿需要的字符；
-   已存在且校验通过就跳过（幂等）；
+2. 默认把**书稿需要的字体下载进** ``book/fonts/``（该目录不入版本控制），
+   并校验每个文件确实是字体、族名正确、覆盖书稿需要的字符；已存在且校验通过就
+   跳过（幂等）。``--use-system-fonts`` 则只检查系统字体，不下载项目字体；
 3. 建目录骨架（``book/build`` 尤其重要：Typst 不会自己创建输出目录）；
 4. 预取 cetz 宏包 —— **用临时目录里的最小探针文件**，不碰书稿、不产出书稿 PDF。
 
 用法::
 
     python tools/init_book.py               # 检查 + 补齐字体 + 预取 cetz
+    python tools/init_book.py --use-system-fonts  # 跳过项目字体下载
     python tools/init_book.py --check-only  # 只检查，不下载、不编译
     python tools/init_book.py --force       # 忽略 manifest，重新校验/下载
 
@@ -25,7 +26,7 @@ init 会编译一次全书来预取 cetz，那既慢又会让"初始化"意外�
 
 * **可以自动下载**（只落进工程目录，删掉可重取）：正文/代码用的字体 ->
   ``book/fonts/``；cetz 宏包 -> Typst 自己的包缓存（Typst 的常规机制）。
-* **只检查、不安装**：Typst、Python 3，以及 ``pdfinfo`` / Pillow / fontTools 这些
+* **只检查、不安装**：SCons、Typst、Python 3，以及 ``pdfinfo`` / Pillow / fontTools 这些
   可选依赖。本脚本**不调用任何包管理器、不下载任何 CLI 可执行文件、不写系统目录**
   （系统字体目录、``%APPDATA%``、``/usr``、``~/.local`` 都不会被碰）。Typst 缺失时
   打印官方安装命令并以**非零退出码**结束；可选依赖缺失只提示，不影响退出码。
@@ -193,7 +194,7 @@ def check_typst() -> str | None:
         say(INFO, "  macOS   : brew install typst")
         say(INFO, "  Linux   : cargo install --locked typst-cli")
         say(INFO, "  any OS  : download from https://github.com/typst/typst/releases")
-        say(INFO, "Then re-run: python tools/init_book.py")
+        say(INFO, "Then re-run the same init-book command.")
         return None
 
     ver = typst_version(exe)
@@ -790,6 +791,28 @@ def ensure_dirs(check_only: bool) -> None:
     say(INFO, "book/build matters most: Typst does not create the output directory.")
 
 
+def check_system_fonts(exe: str | None) -> bool:
+    """复用构建器的候选列表，检查系统字体模式是否能实际工作。"""
+    print()
+    print("== 2. System fonts ==")
+    if not exe:
+        say(INFO, "Skipped because Typst is unavailable.")
+        return False
+
+    # 两个入口必须共享同一套平台候选，避免 init 成功而 build 使用另一套名单。
+    from build_book import select_system_fonts
+
+    selected = select_system_fonts(exe)
+    if selected is None:
+        return False
+    body, code = selected
+    say(OK, "System body fonts: %s" % " -> ".join(body))
+    say(OK, "System code fonts: %s" % " -> ".join(code))
+    say(INFO, "Project font download was skipped (--use-system-fonts).")
+    say(INFO, "System-font output is machine-dependent and must not be released.")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # 4) 预取 cetz 宏包（最小探针，不碰书稿）
 # ---------------------------------------------------------------------------
@@ -805,12 +828,12 @@ def prefetch_cetz(exe: str, check_only: bool) -> bool:
     print("== 4. Prefetch the cetz package (does NOT build the book) ==")
     if check_only:
         say(INFO, "Skipped (--check-only).")
-        say(INFO, "The first 'build-book' run downloads @preview/cetz:%s and needs network access."
+        say(INFO, "The first 'scons build-book' run downloads @preview/cetz:%s and needs network access."
             % CETZ_VERSION)
         return True
 
     say(INFO, "Compiling a minimal probe in a TEMPORARY directory to populate the package cache.")
-    say(INFO, "The book itself is NOT compiled here -- use tools/build_book.py for that.")
+    say(INFO, "The book itself is NOT compiled here -- use 'scons build-book' for that.")
 
     with tempfile.TemporaryDirectory(prefix="dsh-cetz-") as workdir:
         typ = os.path.join(workdir, "cetz-probe.typ")
@@ -864,19 +887,32 @@ def main() -> int:
                     help="only inspect; do not create directories and do not download/compile")
     ap.add_argument("--force", action="store_true",
                     help="ignore the font manifest and re-verify every font file")
+    ap.add_argument("--use-system-fonts", action="store_true",
+                    help="check installed OS font fallbacks and skip project font downloads")
     args = ap.parse_args()
+
+    if args.force and args.use_system_fonts:
+        ap.error("--force and --use-system-fonts are mutually exclusive")
 
     print("=" * 70)
     print("Book build environment (Typst)")
     print("Project root : %s" % ROOT)
     print("Book         : %s" % BOOK)
-    print("Fonts        : %s" % FONTS)
-    print("Mode         : %s" % ("check-only" if args.check_only else "init"))
+    print("Fonts        : %s" % ("installed system fallbacks" if args.use_system_fonts
+                                  else FONTS))
+    mode = "system fonts" if args.use_system_fonts else "project fonts"
+    if args.check_only:
+        mode += ", check-only"
+    print("Mode         : %s" % mode)
     print("=" * 70)
     say(INFO, "This script prepares the environment. It does NOT build the book;")
-    say(INFO, "run 'python tools/build_book.py' for the PDF.")
-    say(INFO, "It only CHECKS tools and downloads project-internal data (fonts) --")
-    say(INFO, "it never installs tools and never writes outside this project.")
+    say(INFO, "run 'scons build-book' for the PDF.")
+    say(INFO, "Tools are CHECKED only: this script never installs Typst, Python, SCons, or other tools.")
+    if args.use_system_fonts:
+        say(INFO, "Project font downloads are disabled (--use-system-fonts).")
+    else:
+        say(INFO, "Only project font data may be downloaded into book/fonts/.")
+    say(INFO, "Typst may populate its normal package cache while prefetching cetz.")
 
     py_ok = check_python()
     if not py_ok:
@@ -885,7 +921,8 @@ def main() -> int:
         say(BAD, "Python 3 is required -- install it, then re-run this script.")
         return 1
     exe = check_typst()
-    fonts_ok = check_fonts(args.check_only, args.force)
+    fonts_ok = (check_system_fonts(exe) if args.use_system_fonts
+                else check_fonts(args.check_only, args.force))
     ensure_dirs(args.check_only)
     cetz_ok = prefetch_cetz(exe, args.check_only) if exe else False
     check_optional()
@@ -902,8 +939,14 @@ def main() -> int:
         say(BAD, "Environment check finished with a failed cetz prefetch.")
         return 1
     say(OK, "Environment ready.")
-    say(INFO, "Build the book with: python tools/build_book.py")
-    say(INFO, "Full verification (slow): python tools/build_book.py --check")
+    build_command = "scons build-book"
+    if args.use_system_fonts:
+        build_command += " --use-system-fonts"
+    say(INFO, "Build the book with: %s" % build_command)
+    verify_command = "scons build-book --check"
+    if args.use_system_fonts:
+        verify_command += " --use-system-fonts"
+    say(INFO, "Full verification (slow): %s" % verify_command)
     print("=" * 70)
     return 0
 

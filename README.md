@@ -22,26 +22,37 @@ Blender，但仍需完成书稿构建和视觉检查。
 
 ## 快速开始
 
+所有平台统一使用根目录的 `SConstruct`。先确保 Python、SCons 与 Typst 可用；项目只检查
+这些工具，不会自行安装。`scons help` 会打印全部 alias 与参数。
+
 先准备书稿环境并构建 PDF：
 
 ```bash
-init-book.bat            # Windows
-build-book.bat
-
-./init-book.sh           # macOS / Linux
-./build-book.sh
+scons init-book
+scons build-book
 ```
 
-`init-book` 会自动下载、校验并安装缺失字体；`build-book` 只做严格预检和编译，不会在
+默认情况下，`init-book` 会自动下载、校验并安装缺失字体；`build-book` 只做严格预检和编译，不会在
 构建过程中联网修改输入。若字体未准备好，构建会停止并提示先运行对应的初始化入口。
+需要完全跳过项目字体下载时，初始化和构建都要显式选择系统字体模式：
+
+```bash
+scons init-book --use-system-fonts
+scons build-book --use-system-fonts
+```
+
+该模式会从当前 Windows、macOS 或 Linux 的候选列表中选择本机实际存在的字体，因此结果
+不保证跨机器一致，不应用于正式发布。
+
+初始化入口只允许下载项目数据，不安装系统工具。尤其是 Typst：脚本只检查
+`tools/bin/typst[.exe]` 和 `PATH`，找不到时会打印官方安装方式并以非零状态退出，绝不会
+自动下载或调用包管理器。首次预取 cetz 时，Typst 自身仍会使用其正常的包缓存机制。
 
 需要修改技术内容时，再准备 Blender 源码、依赖和工具链：
 
 ```bash
-init-blender.bat         # Windows；源码下载到 blender/
-build-blender.bat        # 生成 Visual Studio solution 并构建
-./init-blender.sh        # macOS / Linux
-./build-blender.sh       # 生成 CMake 工程并构建
+scons init-blender       # 源码下载到 blender/
+scons build-blender      # 生成本机 CMake 工程并构建
 ```
 
 `init-blender` 负责源码、工具链检查，以及官方要求在构建前额外准备的平台依赖；
@@ -61,19 +72,19 @@ macOS/Linux 默认使用 `build_macos/` 或 `build_linux/`。
 python qa/check_markdown.py
 python qa/check_examples.py
 python qa/check_source_refs.py
-python tools/build_book.py --check
+scons build-book --check
 ```
 
 生成对外发布目录：
 
 ```bash
-build-book-release.bat        # Windows
-./build-book-release.sh       # macOS / Linux
+scons build-book --release
 ```
 
 结果位于 `dist/blender-development-guide/`，顶层严格只有 PDF 与 `examples/`。
 发布脚本会先检查书中示例脚注、示例文件和 Python 语法，再构建 PDF；传入 `--check`
-还会执行逐页渲染与版心溢出扫描。
+还会执行逐页渲染与版心溢出扫描。发布构建必须使用项目固定字体，因此 `--release` 与
+`--use-system-fonts` 互斥。
 
 ## 项目文档
 
@@ -83,21 +94,34 @@ build-book-release.bat        # Windows
 - [质量检查](doc/README-QA.md)：稳定检查器、适用边界和不应归档的产物。
 - `AGENTS.md`：面向维护者和自动化工具的工程约束，保留在仓库根目录。
 
-## 入口脚本
+## SCons 入口
 
-| Windows | macOS / Linux | 职责 |
-|---|---|---|
-| `init-book.bat` | `./init-book.sh` | 下载并校验书稿字体、检查 Typst、准备书稿环境 |
-| `build-book.bat` | `./build-book.sh` | 只读预检字体并构建、检查 PDF |
-| `build-book-release.bat` | `./build-book-release.sh` | 构建仅含 PDF 与 `examples/` 的书籍发布目录 |
-| `init-blender.bat` | `./init-blender.sh` | 拉取固定 Blender 源码、检查工具链，并准备官方要求的构建前依赖 |
-| `build-blender.bat` | `./build-blender.sh` | 生成 Blender CMake 工程并完成本机构建 |
+| Alias | 职责 |
+|---|---|
+| `scons init-book` | 检查 Typst、准备书稿环境；默认下载项目字体，`--use-system-fonts` 时跳过 |
+| `scons build-book` | 只读预检字体并构建、检查 PDF |
+| `scons init-blender` | 拉取固定 Blender 源码、检查工具链，并准备官方要求的构建前依赖 |
+| `scons build-blender` | 生成 Blender CMake 工程并完成本机构建 |
+| `scons help` | 打印全部 alias、参数与示例 |
+
+SCons 只负责编排；实际跨平台逻辑仍位于 `tools/` 下的 Python 脚本中。常用参数示例：
+
+```bash
+scons build-book --check
+scons init-book --use-system-fonts
+scons build-book --use-system-fonts
+scons build-book --release
+scons build-book --release --check
+scons init-blender --check-only
+scons build-blender --blender-config=Debug -j 12
+```
 
 ## 目录概览
 
 ```text
 README.md                 项目入口
 AGENTS.md                 维护与自动化约束
+SConstruct                跨平台初始化与构建入口
 doc/                      项目文档
 book/                     Typst 书稿、插图、截图和随书案例
 book/examples/            书中明确标注的完整示例源码
@@ -109,7 +133,7 @@ dist/                     对外发布目录（不入库）
 build_*/                  Blender 本机构建产物（不入库）
 ```
 
-所有初始化脚本只向工程目录写入可重新获取的数据，不安装系统工具，也不修改系统环境。
+所有初始化入口只向工程目录写入可重新获取的数据，不安装系统工具，也不修改系统环境。
 详细边界分别见两份构建文档。
 
 ## 验证原则

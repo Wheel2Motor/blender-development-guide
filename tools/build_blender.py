@@ -142,7 +142,7 @@ def validate_source(source: Path, allow_other_revision: bool) -> bool:
         say(BAD, "Blender source is incomplete at %s." % source)
         for name in missing:
             say(INFO, "  missing: %s" % name)
-        say(INFO, "Run init-blender.bat / ./init-blender.sh before building.")
+        say(INFO, "Run 'scons init-blender' before building.")
         return False
 
     if not tool_path("git"):
@@ -187,7 +187,7 @@ def validate_libraries(source: Path, allow_upstream_handling: bool) -> bool:
         if allow_upstream_handling:
             say(INFO, "Blender's upstream make.bat will handle or prompt for dependencies.")
             return True
-        say(INFO, "Run ./init-blender.sh before building.")
+        say(INFO, "Run 'scons init-blender' before building.")
         return False
 
     pointers = lfs_pointer_files(str(library))
@@ -199,7 +199,7 @@ def validate_libraries(source: Path, allow_upstream_handling: bool) -> bool:
         if allow_upstream_handling:
             say(INFO, "Continuing with Blender's upstream dependency handling unchanged.")
             return True
-        say(INFO, "Run ./init-blender.sh to restore dependencies.")
+        say(INFO, "Run 'scons init-blender' to restore dependencies.")
         return False
 
     say(OK, "Prepared dependencies found at %s." % library)
@@ -218,7 +218,7 @@ def validate_windows_msvc() -> bool:
         say(BAD, "No verifiable MSVC installation was found.")
         say(INFO, "Visual Studio is discovered with vswhere; a Developer Command Prompt")
         say(INFO, "is not required. Install the 'Desktop development with C++' workload.")
-        say(INFO, "Run init-blender.bat for detailed diagnostics and install hints.")
+        say(INFO, "Run 'scons init-blender' for detailed diagnostics and install hints.")
         return False
     if cmp_ver(msvc, MSVC_TOOLSET_MIN) < 0:
         say(BAD, "MSVC toolset %s is below the required %s." % (
@@ -226,7 +226,7 @@ def validate_windows_msvc() -> bool:
         ))
         say(INFO, "Blender 5.2.2 requires Visual Studio 2022 17.14.14 or newer.")
         say(INFO, "Open Visual Studio Installer, update Visual Studio and its C++ workload,")
-        say(INFO, "then rerun build-blender.bat from any cmd.exe window.")
+        say(INFO, "then rerun 'scons build-blender' from any terminal.")
         return False
     say(OK, "Auto-detected supported MSVC toolset %s." % msvc)
     return True

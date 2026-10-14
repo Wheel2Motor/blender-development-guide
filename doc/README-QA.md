@@ -63,7 +63,7 @@ python qa/check_source_refs.py
 
 ```bash
 python qa/check_examples.py
-python tools/build_book.py --check
+scons build-book --check
 ```
 
 ## 不应提交的内容

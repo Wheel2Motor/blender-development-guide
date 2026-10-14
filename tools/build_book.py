@@ -4,11 +4,9 @@
 
 做三件事：
 
-1. 用绝对路径跑
-   ``typst compile --font-path book/fonts --ignore-system-fonts --ignore-embedded-fonts
-   book/main.typ book/build/blender-development-guide.pdf``（不依赖调用者当前目录）；
-   字体全部来自 ``book/fonts/``，完全不看系统字体，因此构建可复现、也不会回退到
-   系统里的商业字体（历史上代码块里的中文会落到 LiSu 隶书）；
+1. 默认用绝对路径和项目固定字体运行 Typst，完全不看系统字体，因此构建可复现、
+   也不会回退到系统里的商业字体；可选 ``--use-system-fonts`` 会枚举本机字体，并从
+   当前平台的候选列表中选择真实存在的正文与等宽字体；
 2. 成功后打印**产物的绝对路径**、文件大小、页数（``pdfinfo``，没有就跳过），
    以及 Typst 的 error / warning 计数；Typst 非零退出或出现任何 error / warning 都把
    诊断原样透出并非零退出；
@@ -19,12 +17,13 @@
 （**不会**下载 Typst，也不会往 ``tools/bin/`` 放东西）；``pdfinfo`` 与 Pillow 是可选
 依赖，缺失时分别只降级"页数报告"与"``--check`` 的溢出扫描"，不影响普通构建。
 字体同样只按 manifest 核验，不在构建过程中下载或修复；缺失时引导运行
-``init-book.bat`` / ``./init-book.sh``。输出目录 ``book/build/`` 在工程内。
+``scons init-book``。输出目录 ``book/build/`` 在工程内。
 
 用法::
 
     python tools/build_book.py            # 只构建并报告
     python tools/build_book.py --check    # 构建 + 逐页渲染 + 版心溢出扫描
+    python tools/build_book.py --use-system-fonts
 
 注意：本脚本打印到控制台的一切文字都是英文 —— Windows 控制台默认代码页是 GBK，
 中文输出会乱码。注释可以保留中文。
@@ -48,7 +47,7 @@ BUILD = os.path.join(BOOK, "build")
 MAIN = os.path.join(BOOK, "main.typ")
 PDF = os.path.join(BUILD, "blender-development-guide.pdf")
 OVERFLOW = os.path.join(ROOT, "tools", "check_overflow.py")
-# 字体由工程自带（book/fonts/，由 tools/init_book.py 下载），构建完全不看系统字体。
+# 默认字体由工程自带（book/fonts/，由 tools/init_book.py 下载），构建完全不看系统字体。
 FONTS = os.path.join(BOOK, "fonts")
 
 # Typst 的字体相关参数，含义见 doc/README-BOOK.md「字体」一节：
@@ -57,7 +56,40 @@ FONTS = os.path.join(BOOK, "fonts")
 #                           也是构建可复现的前提；
 #   --ignore-embedded-fonts 连 Typst 内置字体也不参与回退，缺字必须显式暴露，
 #                           而不是被 DejaVu / Libertinus 悄悄顶掉。
-FONT_ARGS = ["--font-path", FONTS, "--ignore-system-fonts", "--ignore-embedded-fonts"]
+PROJECT_FONT_ARGS = [
+    "--font-path", FONTS, "--ignore-system-fonts", "--ignore-embedded-fonts",
+]
+
+# ``--use-system-fonts`` 只从当前系统中实际存在的字体里选取候选，避免把不存在的
+# family 传给 Typst 并产生 warning。代码字体末尾追加正文字体，给中文注释兜底。
+SYSTEM_FONT_CANDIDATES = {
+    "windows": {
+        "body": (
+            "Microsoft YaHei", "Microsoft YaHei UI", "DengXian", "SimHei", "Arial",
+        ),
+        "code": (
+            "Cascadia Mono", "Cascadia Code", "Consolas", "Source Code Pro",
+            "Courier New",
+        ),
+    },
+    "macos": {
+        "body": (
+            "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Songti SC",
+            "Arial Unicode MS", "Helvetica", "Arial",
+        ),
+        "code": ("SF Mono", "Menlo", "Monaco", "Courier New"),
+    },
+    "linux": {
+        "body": (
+            "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC",
+            "WenQuanYi Micro Hei", "WenQuanYi Zen Hei", "DejaVu Sans", "Liberation Sans",
+        ),
+        "code": (
+            "Noto Sans Mono", "Source Code Pro", "DejaVu Sans Mono",
+            "Liberation Mono", "Ubuntu Mono",
+        ),
+    },
+}
 
 OK, BAD, INFO = "[ OK ]", "[FAIL]", "[ .. ]"
 
@@ -112,6 +144,66 @@ def find_typst() -> str | None:
         if os.path.isfile(cand):
             return cand
     return shutil.which("typst")
+
+
+def platform_key() -> str:
+    if sys.platform == "win32":
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
+
+
+def select_system_fonts(exe: str) -> tuple[list[str], list[str]] | None:
+    """Return available body/code fallbacks for this OS, in preference order."""
+    cp = run([exe, "fonts", "--ignore-embedded-fonts"], stream=False)
+    if cp.returncode != 0:
+        say(BAD, "Could not enumerate system fonts with 'typst fonts'.")
+        out = text_of(cp).strip()
+        if out:
+            print(out)
+        return None
+
+    installed = {
+        line.strip().casefold(): line.strip()
+        for line in text_of(cp).splitlines()
+        if line.strip()
+    }
+    candidates = SYSTEM_FONT_CANDIDATES[platform_key()]
+
+    def available(names: tuple[str, ...]) -> list[str]:
+        return [installed[name.casefold()] for name in names if name.casefold() in installed]
+
+    body = available(candidates["body"])
+    mono = available(candidates["code"])
+    if not body:
+        say(BAD, "No supported system body font was found for %s." % platform_key())
+        say(INFO, "Candidates: %s" % ", ".join(candidates["body"]))
+        return None
+    if not mono:
+        say(BAD, "No supported system monospace font was found for %s." % platform_key())
+        say(INFO, "Candidates: %s" % ", ".join(candidates["code"]))
+        return None
+
+    # 等宽字体通常不含 CJK；把正文字体追加为代码中文的显式回退。
+    code = mono + [name for name in body if name not in mono]
+    return body, code
+
+
+def system_font_args(exe: str) -> list[str] | None:
+    selected = select_system_fonts(exe)
+    if selected is None:
+        return None
+    body, code = selected
+    say(OK, "System body fonts: %s" % " -> ".join(body))
+    say(OK, "System code fonts: %s" % " -> ".join(code))
+    say(INFO, "System-font mode is machine-dependent; use pinned project fonts for releases.")
+    return [
+        "--ignore-embedded-fonts",
+        "--input", "font-mode=system",
+        "--input", "font-body=" + ";".join(body),
+        "--input", "font-code=" + ";".join(code),
+    ]
 
 
 def count_diagnostics(out: str) -> tuple[int, int]:
@@ -183,8 +275,7 @@ def verify_project_fonts() -> bool:
 
     say(BAD, "Book fonts are missing, invalid, or do not match the pinned manifest.")
     say(INFO, "The build never downloads or repairs fonts. Prepare them first:")
-    say(INFO, "  Windows       : init-book.bat")
-    say(INFO, "  macOS / Linux : ./init-book.sh")
+    say(INFO, "  scons init-book")
     say(INFO, "Then re-run this build command; no manual file copying is required.")
     return False
 
@@ -194,6 +285,9 @@ def main() -> int:
     ap.add_argument("--check", "--verify", dest="check", action="store_true",
                     help="after building, render every page and scan for margin overflow "
                          "(slow, about ten minutes)")
+    ap.add_argument("--use-system-fonts", action="store_true",
+                    help="use an OS-specific list of installed fallback fonts instead of "
+                         "the pinned project fonts (not reproducible; not for releases)")
     args = ap.parse_args()
 
     print("=" * 70)
@@ -202,6 +296,8 @@ def main() -> int:
     print("Book dir     : %s" % BOOK)
     print("Output       : %s" % PDF)
     print("Verify       : %s" % ("yes (--check)" if args.check else "no"))
+    print("Fonts        : %s" % ("system fallbacks" if args.use_system_fonts
+                                 else "pinned project fonts"))
     print("=" * 70)
 
     if not os.path.isfile(MAIN):
@@ -226,17 +322,23 @@ def main() -> int:
         os.makedirs(BUILD, exist_ok=True)
         say(OK, "Created output directory: %s" % BUILD)
 
-    # 字体必须已经由 init-book 备好；构建只读核验，不下载、不修复。
-    if not verify_project_fonts():
-        return 1
-    font_files = [f for f in sorted(os.listdir(FONTS))
-                  if f.lower().endswith((".ttf", ".otf", ".ttc", ".otc"))]
-    say(OK, "Using %d project font file(s) from %s; system fonts are ignored."
-        % (len(font_files), FONTS))
+    if args.use_system_fonts:
+        font_args = system_font_args(exe)
+        if font_args is None:
+            return 1
+    else:
+        # 项目字体必须已经由 init-book 备好；构建只读核验，不下载、不修复。
+        if not verify_project_fonts():
+            return 1
+        font_files = [f for f in sorted(os.listdir(FONTS))
+                      if f.lower().endswith((".ttf", ".otf", ".ttc", ".otc"))]
+        say(OK, "Using %d project font file(s) from %s; system fonts are ignored."
+            % (len(font_files), FONTS))
+        font_args = PROJECT_FONT_ARGS
 
     start = time.time()
-    say(INFO, "Running: %s compile %s %s %s" % (exe, " ".join(FONT_ARGS), MAIN, PDF))
-    cp = run([exe, "compile"] + FONT_ARGS + [MAIN, PDF], cwd=BOOK, stream=False)
+    say(INFO, "Running: %s compile %s %s %s" % (exe, " ".join(font_args), MAIN, PDF))
+    cp = run([exe, "compile"] + font_args + [MAIN, PDF], cwd=BOOK, stream=False)
     out = text_of(cp)
     elapsed = time.time() - start
     errors, warnings = count_diagnostics(out)
@@ -293,7 +395,7 @@ def main() -> int:
     if stale:
         say(INFO, "Removed %d pre-existing page-*.png before rendering." % stale)
     say(INFO, "Rendering every page as PNG ...")
-    cp = run([exe, "compile"] + FONT_ARGS + ["--format", "png", "--ppi", "90",
+    cp = run([exe, "compile"] + font_args + ["--format", "png", "--ppi", "90",
               "main.typ", "build/page-{p}.png"], cwd=BOOK, stream=True)
     if cp.returncode != 0:
         say(BAD, "Page render FAILED (exit code %d)." % cp.returncode)

@@ -16,9 +16,8 @@
 //    4. 显式 `#set text(...)` 一律给 `weight`：正文用的是静态 Noto Sans SC
 //       （Regular 400 / Bold 700 两份 OTF）。历史上用过可变字体，其默认实例是
 //       Thin(100)，漏写 weight 就会渲染成细体；这条约定保留下来更稳。
-//    5. 字体全部由工程自带（book/fonts/，SIL OFL），构建必须加
-//       `--font-path book/fonts --ignore-system-fonts --ignore-embedded-fonts`。
-//       见下方「字体与调色板」。
+//    5. 默认构建使用工程自带字体；`--use-system-fonts` 开发模式通过 `sys.inputs`
+//       注入当前平台实际存在的 fallback 列表。见下方「字体与调色板」。
 // ============================================================================
 
 // ---------------------------------------------------------------------------
@@ -47,7 +46,7 @@
 // ---------------------------------------------------------------------------
 // 字体与调色板
 // ---------------------------------------------------------------------------
-// 字体**由工程自带**（`book/fonts/`，全部 SIL OFL，可自由嵌入分发），构建时必须加
+// 默认字体**由工程自带**（`book/fonts/`，全部 SIL OFL，可自由嵌入分发），构建时必须加
 //   --font-path book/fonts --ignore-system-fonts --ignore-embedded-fonts
 // 三条缺一不可：
 //   * --font-path             指向工程字体目录（由 init-book 下载，见 .gitignore）；
@@ -55,8 +54,14 @@
 //                             这类系统回退的关键，也是构建可复现的前提；
 //   * --ignore-embedded-fonts 连 Typst 内置的 DejaVu Sans Mono / Libertinus Serif
 //                             也不参与回退，任何缺字都必须显式暴露而不是被顶掉。
-// 一个字符都不许落到工程之外。
-#let font-zh = "Noto Sans SC"                   // 正文中文（NotoSansSC-Regular/Bold.otf）
+// 一个字符都不许落到工程之外。开发者显式使用 `--use-system-fonts` 时，构建脚本先枚举
+// 本机字体，再把真实存在的 family 通过以下 inputs 传入；不存在的候选不会进入书稿：
+//   font-mode=system, font-body=A;B;C, font-code=X;Y;A;B;C
+#let font-mode = sys.inputs.at("font-mode", default: "project")
+#let input-font-list(name) = sys.inputs.at(name, default: "").split(";").filter(it => it != "")
+#let system-font-body = input-font-list("font-body")
+#let system-font-code = input-font-list("font-code")
+#let font-zh = if font-mode == "system" { system-font-body } else { "Noto Sans SC" }
 
 // 代码（代码块与行内代码）：Noto Sans Mono 首选 + Noto Sans Mono CJK SC 回退。
 //
@@ -69,7 +74,7 @@
 //   注意：Noto Sans Mono CJK SC **自己**的制表符是全宽的（2 格），但首选字体
 //   已经命中那些码位，所以永远不会走到它的制表符 —— 这一点实测确认过。
 //   （实测：`├`/`─` 与 ASCII 同为 5.1pt@8.5pt，`中` 为 8.5pt。）
-#let font-mono = "Noto Sans Mono"
+#let font-mono = if font-mode == "system" { system-font-code } else { "Noto Sans Mono" }
 #let font-mono-cjk = "Noto Sans Mono CJK SC"
 
 // 最后兜底：拉丁 Noto Sans。**必须放在每个字体栈的末尾。**
@@ -87,10 +92,14 @@
 #let font-fallback = "Noto Sans"
 
 // 正文用的字体栈。
-#let font-body = (font-zh, font-fallback)
+#let font-body = if font-mode == "system" { system-font-body } else { (font-zh, font-fallback) }
 
 // 代码统一使用的字体栈：拉丁等宽 + 等宽中文回退 + 拉丁兜底。
-#let font-code = (font-mono, font-mono-cjk, font-fallback)
+#let font-code = if font-mode == "system" {
+  system-font-code
+} else {
+  (font-mono, font-mono-cjk, font-fallback)
+}
 
 #let c-primary = rgb("#1f6feb")
 #let c-note = rgb("#1f6feb")

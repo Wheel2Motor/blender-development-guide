@@ -7,7 +7,7 @@
 
 # ---- 一、可拉取的源码与预编译库 ----
 # 固定基准的 Blender 源码（约 7 GB）与 lib/ 预编译库。重新拉取很久，所以保留在磁盘上
-# 供核对与截图使用，但不入库。需要时：init-blender.bat / ./init-blender.sh
+# 供核对与截图使用，但不入库。需要时：scons init-blender
 /blender/
 /lib/
 
@@ -19,8 +19,7 @@
 
 # ---- 三、文档构建产物 ----
 # 整本书的 PDF 与逐页渲染图都在这里，每次构建都会变，**不入库**。
-# 要 PDF 直接跑 build-book.bat（输出路径是 book/build/）：
-#   build-book.bat   /   ./build-book.sh
+# 要 PDF 直接跑 scons build-book（输出路径是 book/build/）。
 book/build/
 # 面向读者的发布目录由 tools/build_book_release.py 重建；顶层只含 PDF 与 examples/。
 /dist/
@@ -73,6 +72,7 @@ _tmp*
 *.tmp
 ~$*
 *.bak
+/.sconsign.dblite
 
 # ---- 八、Python ----
 __pycache__/

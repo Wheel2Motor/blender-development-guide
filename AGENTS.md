@@ -3,18 +3,18 @@
 这是一本 **技术书的书稿工程**，不是一个软件项目。改动的验收标准是
 「PDF 能编译、版面正确、引用与源码相符」，不是「测试通过」。
 
-> **首次接手**：先跑 `init-book.bat` / `./init-book.sh`（检查 Typst、**下载字体到
-> `book/fonts/`**、目录骨架、cetz 宏包预取），再跑 `build-book.bat` / `./build-book.sh`。
+> **首次接手**：先跑 `scons init-book`（检查 Typst、**下载字体到
+> `book/fonts/`**、目录骨架、cetz 宏包预取），再跑 `scons build-book`。
 > **`init-book` 不构建书稿** —— 出 PDF 是 `build-book` 的职责。
 > `build-book` 也绝不下载字体：它先按 `.manifest.json` 做只读预检，缺失、损坏或哈希
 > 不符就非零退出并引导运行 `init-book`。`init-book` 下载到临时目录，校验通过后才原子
 > 安装，不要求人工解压或搬运文件。
-> 要核对源码或重截截图才需要 `init-blender.bat` / `./init-blender.sh`
-> （约 7 GB，很久），随后用 `build-blender.bat` / `./build-blender.sh` 生成工程并编译。
+> 要核对源码或重截截图才需要 `scons init-blender`
+> （约 7 GB，很久），随后用 `scons build-blender` 生成工程并编译。
 > `init-blender` 负责源码与官方要求在构建前额外准备的依赖；`build-blender` 自身只核验、
 > 配置和构建，
-> 但不屏蔽 Blender 上游构建脚本原有的依赖懒下载行为。五组入口都只是平台壳，
-> 逻辑在 `tools/` 下的对应 `.py` 里。
+> 但不屏蔽 Blender 上游构建脚本原有的依赖懒下载行为。五组动作由根目录
+> `SConstruct` 提供 alias 与 `build-book --release` 模式，逻辑仍在 `tools/` 下的对应 `.py` 里。
 
 ## 一、先读这四份
 
@@ -43,8 +43,8 @@
 
 ```bash
 python qa/check_examples.py           # 完整示例脚注、文件覆盖与 Python 语法
-python tools/build_book.py            # ① 编译（必须零 error 零 warning）
-python tools/build_book.py --check    # ② + ③ 逐页渲染 + 版心溢出扫描（约十分钟）
+scons build-book                      # ① 编译（必须零 error 零 warning）
+scons build-book --check              # ② + ③ 逐页渲染 + 版心溢出扫描（约十分钟）
 ```
 
 `--check` 做的事就是下面这串手工命令，跑完会自动删掉 `book/build/page-*.png`：
@@ -100,7 +100,7 @@ python qa/check_markdown.py
 
 - **环境边界（脚本只往工程目录写，从不装工具）**：可以自动获取的只有工程内数据
   （字体 → `book/fonts/`；Blender 源码与 `lib/` → `blender/`；cetz → Typst 自己的
-  包缓存）。`typst` / `git` / `cmake` / `ninja` / 编译器 / Python 只 **检查**：必需项缺失
+  包缓存）。`scons` / `typst` / `git` / `cmake` / `ninja` / 编译器 / Python 只 **检查**：必需项缺失
   时打印官方安装命令并 **非零退出**，可选项（`ninja`、`pdfinfo`、Pillow、`fontTools`）
   缺失只降级功能、不影响退出码。`git-lfs` 是 **有条件的必需项**：需要拉取/还原 `lib/`
   （Git LFS 子模块）时缺它就是 `[FAIL]`；`lib/` 已经是还原好的实体文件时缺它只 `[WARN]`。
@@ -108,9 +108,13 @@ python qa/check_markdown.py
   可执行文件、不写系统目录**；Typst 也 **不会** 被下载（`tools/bin/typst[.exe]` 只是
   "想钉住某一版时自己放二进制"的可选位置）。详见根 `README.md` 的「环境边界」一节。
 - **Typst 0.15.1** + cetz 0.3.4（`@preview/cetz:0.3.4`，由 Typst 自动拉取）
-- **字体由工程自带**（`book/fonts/`，由 `init-book` 下载并校验；**不入版本控制**，
+- **默认字体由工程自带**（`book/fonts/`，由 `init-book` 下载并校验；**不入版本控制**，
   约 50 MB）。构建 **完全不看系统字体**，必须带三条参数：
   `--font-path book/fonts --ignore-system-fonts --ignore-embedded-fonts`。
+  `scons init-book --use-system-fonts` 会跳过项目字体下载并检查本机候选；
+  `scons build-book --use-system-fonts` 只用于本机临时预览：构建器会从 Windows、macOS、
+  Linux 各自的候选列表中筛选实际安装的字体，并通过 Typst inputs 注入书稿；该模式不保证
+  分页可复现，也可能涉及系统字体的再分发限制，不得用于正式发布。
   全部字体都是 **SIL OFL**，允许嵌入与再分发：
 
   | 用途 | 字体 | 来源 |
@@ -159,7 +163,7 @@ python qa/check_markdown.py
 
 - `blender/`：Blender 核对基准由 `book/blender-baseline.json` 唯一定义；Typst 书稿、
   初始化脚本和源码引用检查器都读取这份配置。
-  **不入版本控制**（重新拉取要很久）。缺了就 `init-blender.bat`（或
+  **不入版本控制**（重新拉取要很久）。缺了就 `scons init-blender`（或
   `python tools/init_blender.py`）。
   注意 `lib/` 是 Git LFS 子模块且 `.gitmodules` 里写着 `update = none`。Linux/macOS
   的官方流程要求在构建前额外准备，例如：
@@ -186,20 +190,23 @@ python qa/check_markdown.py
 
 | 工具 | 用途 |
 |---|---|
-| `tools/init_book.py` | 检查 Typst、**下载并校验 `book/fonts/` 里的字体**（幂等）、建目录骨架、用 **临时探针** 预取 cetz 宏包。**不构建书稿**（入口：`init-book.bat` / `.sh`） |
-| `tools/build_book.py` | 只读核验字体后构建 PDF（缺字体则引导运行 `init-book`，绝不自行下载）；`--check` 再做逐页渲染 + 溢出扫描（入口：`build-book.bat` / `.sh`） |
-| `tools/build_book_release.py` | 检查示例、构建 PDF，并生成顶层仅含 PDF 与 `examples/` 的书籍发布目录（入口：`build-book-release.bat` / `.sh`） |
+| `SConstruct` | 五个跨平台 alias：`init-book`、`build-book`、`init-blender`、`build-blender`、`help`；`build-book --release` 负责发布构建；SCons 只编排 `tools/` 下的 Python 逻辑 |
+| `tools/init_book.py` | 检查 Typst；默认 **下载并校验 `book/fonts/` 里的字体**（幂等），`--use-system-fonts` 时跳过下载并检查系统候选；建目录骨架并用 **临时探针** 预取 cetz 宏包。**不构建书稿**（入口：`scons init-book`） |
+| `tools/build_book.py` | 默认只读核验项目字体后构建 PDF；`--use-system-fonts` 可显式选择系统 fallback；`--check` 再做逐页渲染 + 溢出扫描（入口：`scons build-book`） |
+| `tools/build_book_release.py` | 检查示例、构建 PDF，并生成顶层仅含 PDF 与 `examples/` 的书籍发布目录（入口：`scons build-book --release`） |
 | `tools/blender_baseline.py` | 读取并校验 `book/blender-baseline.json`，供 Blender 初始化与源码引用检查共用 |
-| `tools/init_blender.py` | 拉取/核对 Blender 源码，在官方要求额外前置步骤的平台准备 `lib/` 预编译库，并探测工具链门槛（入口：`init-blender.bat` / `.sh`） |
-| `tools/build_blender.py` | 只读核验已初始化的源码与依赖，生成 out-of-source CMake 工程并构建；Windows 生成并构建 Visual Studio solution（入口：`build-blender.bat` / `.sh`） |
+| `tools/init_blender.py` | 拉取/核对 Blender 源码，在官方要求额外前置步骤的平台准备 `lib/` 预编译库，并探测工具链门槛（入口：`scons init-blender`） |
+| `tools/build_blender.py` | 只读核验已初始化的源码与依赖，生成 out-of-source CMake 工程并构建；Windows 生成并构建 Visual Studio solution（入口：`scons build-blender`） |
 | `tools/check_overflow.py` | 逐页扫描版心外墨迹（**横向溢出**） |
 | `tools/fix_typst_syntax.py` | 修正 Markdown 残留（`**粗**`、`###` 标题），**自动跳过代码块** |
 | `tools/capture_screenshots.py` | 实机截图采集（**需要 GUI**，写进 `book/res/`） |
 | `tools/example_addon/` | 截图用的示例插件源码（不是随书代码案例） |
 | `qa/check_examples.py` | 校验完整示例脚注、发布文件覆盖与 Python 语法，不生成报告 |
 
-五组 `.bat` / `.sh` 入口都只是平台壳：`cd` 到工程根、找 Python 3、把参数原样透传。
-`.bat` / `.sh` 里 **不能出现中文**（cmd 默认代码页是 GBK，会乱码甚至解析出错）；
+根目录只保留一个 `SConstruct` 跨平台入口，alias 与参数必须同步维护在 `scons help`、
+根 `README.md` 和对应构建文档中。SCons 只负责编排，不应复制 `tools/` 中的业务逻辑。
+`--release` 与 `--use-system-fonts` 必须保持互斥；发布包只能使用项目固定字体。
+`init-book` 的 `--force` 与 `--use-system-fonts` 也互斥，因为系统字体模式没有项目字体可重验。
 **`tools/` 下所有脚本面向用户的输出一律用英文** —— `print` / `sys.exit` / `argparse`
 的 `description` 与 `help` 都算；注释可以是中文。这条不只是"乱码不好看"：GBK 控制台下
 输出非 ASCII 会抛 `UnicodeEncodeError`，**连错误提示都打不出来**（`check_overflow.py`

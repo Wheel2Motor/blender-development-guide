@@ -8,7 +8,7 @@
 2. 仅在上游要求“构建前额外准备”时取对应平台的预编译库子模块；
    Windows 的 ``make.bat`` 会自行检测并询问下载，因此初始化脚本不重复实现；
 3. 探测开发工具链并打印版本，与书里第 2 章的门槛对照给出 PASS / FAIL；
-4. 打印调用 ``build-blender.bat`` / ``build-blender.sh`` 的下一步命令
+4. 打印调用 ``scons build-blender`` 的下一步命令
    （**不真的构建**）。
 
 环境边界（重要）：
@@ -820,10 +820,10 @@ def next_steps(src: str) -> None:
         " --src \"%s\"" % src
     )
     if platform.system() == "Windows":
-        say(INFO, "cd /d \"%s\"  &&  build-blender.bat%s" % (ROOT, source_arg))
+        say(INFO, "cd /d \"%s\"  &&  scons build-blender%s" % (ROOT, source_arg))
         say(INFO, "Blender's upstream dependency handling remains active in make.bat.")
     else:
-        say(INFO, "cd \"%s\"  &&  ./build-blender.sh%s" % (ROOT, source_arg))
+        say(INFO, "cd \"%s\"  &&  scons build-blender%s" % (ROOT, source_arg))
         say(INFO, "Required pre-build platform libraries were checked by init-blender.")
     say(INFO, "A full build takes hours and writes to build_*/ next to the repository.")
 

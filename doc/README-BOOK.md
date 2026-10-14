@@ -8,14 +8,13 @@
 在工程根目录运行：
 
 ```bash
-init-book.bat            # Windows
-./init-book.sh           # macOS / Linux
+scons init-book
 ```
 
-入口脚本调用 `tools/init_book.py`，负责：
+SCons alias 调用 `tools/init_book.py`，负责：
 
 - 检查 Python 与 Typst；
-- 下载并校验 `book/fonts/` 中的项目字体；
+- 默认下载并校验 `book/fonts/` 中的项目字体；
 - 创建书稿构建目录；
 - 用临时探针预取 `@preview/cetz:0.3.4`。
 
@@ -23,10 +22,24 @@ init-book.bat            # Windows
 SHA-256 校验后，再原子安装到 `book/fonts/`。下载失败或内容与清单不符时不会覆盖已有
 文件，也不需要维护者手工解压、移动或改配置。
 
-它不会安装命令行工具，也不会构建 PDF。只检查、不下载时使用：
+它不会安装命令行工具，也不会构建 PDF。Typst 缺失时，初始化会打印官方安装方式并以
+非零状态退出；它不会下载 Typst，也不会调用 `winget`、Homebrew、apt、Cargo 等包管理器。
+首次预取 cetz 时，Typst 自身会按正常机制写入其包缓存；cetz 是书稿依赖，不是由脚本
+安装的系统工具。
+
+如果准备使用系统字体，可在初始化阶段一并声明。该命令会检查候选系统字体，但完全跳过
+`book/fonts/` 的校验和下载：
+
+```bash
+scons init-book --use-system-fonts
+```
+
+只检查、不下载或编译时使用：
 
 ```bash
 python tools/init_book.py --check-only
+# 或
+scons init-book --check-only
 ```
 
 ## 二、构建与验证
@@ -34,20 +47,17 @@ python tools/init_book.py --check-only
 普通构建：
 
 ```bash
-build-book.bat            # Windows
-./build-book.sh           # macOS / Linux
+scons build-book
 ```
 
 构建脚本不会联网下载或修复字体。它会在调用 Typst 前按清单进行只读预检；任何字体缺失、
-损坏或哈希不符都会立即停止，并提示先运行 `init-book.bat` 或 `./init-book.sh`。初始化成功
+损坏或哈希不符都会立即停止，并提示先运行 `scons init-book`。初始化成功
 后再次构建即可，不存在需要人工处理字体文件的中间步骤。
 
 完整检查会重新构建、逐页渲染并扫描版心溢出：
 
 ```bash
-build-book.bat --check
-# 或
-python tools/build_book.py --check
+scons build-book --check
 ```
 
 构建产物位于 `book/build/blender-development-guide.pdf`。脚本会打印绝对路径、文件大小、
@@ -57,13 +67,14 @@ python tools/build_book.py --check
 对外发布时不要直接复制整个 `book/build/`。运行：
 
 ```bash
-build-book-release.bat        # Windows
-./build-book-release.sh       # macOS / Linux
+scons build-book --release
 ```
 
 发布目录位于 `dist/blender-development-guide/`，顶层只包含
 `blender-development-guide.pdf` 与 `examples/`。`book/examples/` 是源码维护位置；
 书中用脚注展示的路径以发布目录为基准，因此统一写成 `examples/...`。
+`--release` 可以和 `--check` 组合，但不能和 `--use-system-fonts` 组合：对外发布始终强制
+使用项目固定字体，以保证分页可复现并避免系统字体的再分发许可问题。
 
 需要直接调用 Typst 时，字体参数不能省略：
 
@@ -75,6 +86,31 @@ typst compile --font-path fonts --ignore-system-fonts --ignore-embedded-fonts \
 
 单独编译章节时要加 `--root .`；若章节引用了其他章节的标签，出现
 `label <fig-xxx> does not exist` 属于预期限制，不代表整书构建失败。
+
+### 使用系统字体
+
+临时开发构建可以跳过项目字体，改用本机字体：
+
+```bash
+scons build-book --use-system-fonts
+scons build-book --check --use-system-fonts
+```
+
+如果尚未初始化，先运行 `scons init-book --use-system-fonts`；初始化和构建使用同一套候选
+列表。`--force` 只适用于项目字体，因此不能与 `--use-system-fonts` 组合。
+
+构建器先执行 `typst fonts --ignore-embedded-fonts`，只把本机实际存在的字体传给 Typst，
+因此候选列表中的缺失项不会产生诊断。各平台的优先列表为：
+
+| 平台 | 正文字体候选 | 等宽字体候选 |
+|---|---|---|
+| Windows | Microsoft YaHei、Microsoft YaHei UI、DengXian、SimHei、Arial | Cascadia Mono、Cascadia Code、Consolas、Source Code Pro、Courier New |
+| macOS | PingFang SC、Hiragino Sans GB、Heiti SC、Songti SC、Arial Unicode MS、Helvetica、Arial | SF Mono、Menlo、Monaco、Courier New |
+| Linux | Noto Sans CJK SC、Noto Sans SC、Source Han Sans SC、WenQuanYi Micro Hei、WenQuanYi Zen Hei、DejaVu Sans、Liberation Sans | Noto Sans Mono、Source Code Pro、DejaVu Sans Mono、Liberation Mono、Ubuntu Mono |
+
+代码字体列表末尾还会追加已找到的正文字体，为中文注释兜底。如果正文或等宽候选一个都
+找不到，构建会明确失败。系统字体模式的分页、字宽和字体许可取决于本机，只适合临时预览；
+正式发布必须使用默认的项目字体模式。
 
 ## 三、目录与样式归属
 
@@ -123,7 +159,7 @@ Typst 的 `#set` 与 `#show` 只在声明文件内生效。章节必须通过 `#
 
 ## 六、字体
 
-构建只使用 `book/fonts/` 中的项目字体，禁止回退到系统字体：
+默认构建只使用 `book/fonts/` 中的项目字体，禁止回退到系统字体：
 
 | 用途 | 字体 | 授权 |
 |---|---|---|
@@ -134,6 +170,7 @@ Typst 的 `#set` 与 `#show` 只在声明文件内生效。章节必须通过 `#
 
 代码字体栈的顺序不能调整：首选字体中的制表符与 ASCII 等宽，中文则由 CJK 等宽字体
 回退。每一处显式 `#set text` 都应指定 `weight`，避免字体版本变化导致意外细体。
+`--use-system-fonts` 是显式选择的开发模式，不改变上述默认与发布要求。
 
 ## 七、术语、引用与脚注
 
@@ -160,7 +197,7 @@ Typst 的 `#set` 与 `#show` 只在声明文件内生效。章节必须通过 `#
 
 1. 运行 `python qa/check_markdown.py`。
 2. 运行 `python qa/check_source_refs.py`。
-3. 运行 `python tools/build_book.py --check`，要求零 error、零 warning、零版心溢出。
+3. 运行 `scons build-book --check`，要求零 error、零 warning、零版心溢出。
 4. 抽查受影响页面，确认没有纵向重叠、裁切或图形语义错误。
 5. 确认 PDF 只嵌入项目字体，没有系统字体回退。
 6. 确认全文无 `#todo` 占位，目录、章节及图表编号正确。
