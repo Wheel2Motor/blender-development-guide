@@ -24,9 +24,8 @@ book/build/
 # 面向读者的发布目录由 tools/build_book_release.py 重建；顶层只含 PDF 与 examples/。
 /dist/
 # 注意：`book/res/` 是书稿资源（书中插图与截图原图），**要入库**，不要在这里忽略它。
-# 各章 / 各图单独编译出的 PDF（排查排版用的脚手架）
-book/chapters/*.pdf
-book/figures/*.pdf
+# PDF 都是可重新生成的构建或发布产物，任何目录下的 PDF 均不得入库。
+*.pdf
 
 # ---- 三之二、书稿字体：只忽略二进制，许可与清单入库 ----
 # 字体二进制很大（约 50 MB：Noto Sans SC 两份 OTF + Noto Sans Mono CJK SC 两份 OTF），

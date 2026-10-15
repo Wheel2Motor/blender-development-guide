@@ -63,7 +63,7 @@
 
   #block(inset: (x: 0.9em, y: 0.6em), radius: 3pt, fill: luma(97%), stroke: 0.5pt + luma(78%))[
     #set par(first-line-indent: 0em)
-    - 代码块按内容标注为 `cpp`、`c`、`python`、`bash`、`cmake`、`text` 等，
+    - 代码块按内容标注为 `cpp`、`c`、`python`、`bash`、`cmake` 等，
       以便区分编程语言、命令和纯文本；
     - 命令示例用 `$` 表示在普通用户权限下的 shell 提示符，`#` 表示需要提权；
     - 平台差异用 `Windows`、`macOS`、`Linux` 三个小标签标出；
