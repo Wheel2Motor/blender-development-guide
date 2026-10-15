@@ -30,9 +30,9 @@
 //  单独的 _preview-*.typ：图文件只导出函数，别的文件不存在）。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, c-source, c-pitfall
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, c-source, c-pitfall, html-figure
 
-#let fig-wm-chain() = canvas(length: 1cm, {
+#let fig-wm-chain() = html-figure("fig-wm-chain", () => canvas(length: 1cm, {
   import draw: *
 
   let vstep = 1.74        // 步进（含行距）
@@ -160,4 +160,4 @@
       OPTYPE_REGISTER = (1 << 0)  ·  OPTYPE_UNDO = (1 << 1)  ·  WM_types.hh:184,186
     ],
     anchor: "west")
-})
+}))

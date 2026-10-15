@@ -27,9 +27,9 @@
 //  排版注意：本图宽 15.6cm（版心 16.4cm）。改动任何文字后必须重渲染确认不重叠。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, html-figure
 
-#let fig-id-main() = canvas(length: 1cm, {
+#let fig-id-main() = html-figure("fig-id-main", () => canvas(length: 1cm, {
   import draw: *
 
   let ptl(c, col) = text(font: font-zh, size: 6.8pt, weight: 700, fill: col)[#c]
@@ -199,4 +199,4 @@
     sans("相关 API：BKE_lib_override_library_create() · _resync() · _make_local() · _delete()", col: luma(32%)),
     anchor: "west",
   )
-})
+}))

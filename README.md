@@ -4,7 +4,7 @@
 与 C++ 源码修改三条实践路径。书籍自身版本由
 [`book/meta.json`](book/meta.json) 唯一定义；全书的 Blender 版本、分支、标签与 commit 由
 [`book/blender-baseline.json`](book/blender-baseline.json) 唯一定义，书稿和检查脚本
-读取同一份配置。
+读取同一份配置。已发布版本与待发布改动记录在 [RELEASE_NOTE.md](RELEASE_NOTE.md)。
 
 ## 维护前提
 
@@ -31,6 +31,17 @@ Blender，但仍需完成书稿构建和视觉检查。
 scons init-book
 scons build-book
 ```
+
+`build-book` 的默认格式是 PDF。实验性 HTML 构建使用：
+
+```bash
+scons build-book --format=html
+```
+
+HTML 输出为 `book/build/blender-development-guide.html`，样式维护在
+`book/html/style.css`。构建器会先把全部 Cetz 图表渲染成
+`book/build/res/*.svg`；默认字体模式还会把已校验的项目字体复制到该资源目录。
+Typst 的 HTML 导出仍是实验功能，因此 `--check` 与 `--release` 只支持 PDF。
 
 默认情况下，`init-book` 会自动下载、校验并安装缺失字体；`build-book` 只做严格预检和编译，不会在
 构建过程中联网修改输入。若字体未准备好，构建会停止并提示先运行对应的初始化入口。
@@ -89,9 +100,10 @@ scons build-book --release
 ## 项目文档
 
 - [书稿规格](doc/BOOK-SPEC.md)：章节结构、内容范围和交付标准。
-- [书稿构建与排版](doc/README-BOOK.md)：Typst 环境、字体、排版规则和 PDF 验收。
+- [书稿构建与排版](doc/README-BOOK.md)：Typst 环境、字体、PDF/HTML 构建和排版验收。
 - [Blender 构建与实证](doc/README-BLENDER.md)：源码、编译、运行测试和截图规范。
 - [质量检查](doc/README-QA.md)：稳定检查器、适用边界和不应归档的产物。
+- [发布说明](RELEASE_NOTE.md)：已发布版本及下一版本的待发布改动。
 - `AGENTS.md`：面向维护者和自动化工具的工程约束，保留在仓库根目录。
 
 ## SCons 入口
@@ -99,36 +111,47 @@ scons build-book --release
 | Alias | 职责 |
 |---|---|
 | `scons init-book` | 检查 Typst、准备书稿环境；默认下载项目字体，`--use-system-fonts` 时跳过 |
-| `scons build-book` | 只读预检字体并构建、检查 PDF |
+| `scons build-book` | 只读预检字体并构建 PDF（默认）或实验性 HTML |
 | `scons init-blender` | 拉取固定 Blender 源码、检查工具链，并准备官方要求的构建前依赖 |
 | `scons build-blender` | 生成 Blender CMake 工程并完成本机构建 |
+| `scons bump-version` | 提升书籍版本，并把 `Pending` 列表移到发布说明最前面 |
 | `scons help` | 打印全部 alias、参数与示例 |
 
 SCons 只负责编排；实际跨平台逻辑仍位于 `tools/` 下的 Python 脚本中。常用参数示例：
 
 ```bash
 scons build-book --check
+scons build-book --format=html
+scons build-book --format=html --use-system-fonts
 scons init-book --use-system-fonts
 scons build-book --use-system-fonts
 scons build-book --release
 scons build-book --release --check
 scons init-blender --check-only
 scons build-blender --blender-config=Debug -j 12
+scons bump-version --minor
 ```
+
+发布新版本前，先把改动以无序列表写入 `RELEASE_NOTE.md` 的 `Pending` 段，再运行
+`scons bump-version --major`、`--minor` 或 `--micro` 中恰好一个。命令会同步更新
+`book/meta.json`，并把待发布条目归入新版本；详见
+[书稿构建与排版](doc/README-BOOK.md)。
 
 ## 目录概览
 
 ```text
 README.md                 项目入口
+RELEASE_NOTE.md           已发布版本与 Pending 改动
 AGENTS.md                 维护与自动化约束
 SConstruct                跨平台初始化与构建入口
 doc/                      项目文档
 book/                     Typst 书稿、插图、截图和随书案例
 book/examples/            书中明确标注的完整示例源码
+book/html/                HTML 样式表
 qa/                       可重复运行且不生成报告文件的质量检查器
 tools/                    初始化、构建、检查和截图工具
 blender/                  固定版本的 Blender 源码与预编译库（不入库）
-book/build/               PDF 与逐页渲染产物（不入库）
+book/build/               PDF、HTML、网页资源与逐页渲染产物（不入库）
 dist/                     对外发布目录（不入库）
 build_*/                  Blender 本机构建产物（不入库）
 ```

@@ -18,9 +18,9 @@
 //  版心 16.4cm，余量 0.64cm）。改动任何文字后必须重渲染确认不重叠。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, blender-version
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, blender-version, html-figure
 
-#let fig-source-tree() = canvas(length: 1cm, {
+#let fig-source-tree() = html-figure("fig-source-tree", () => canvas(length: 1cm, {
   import draw: *
 
   let y0 = 10.0
@@ -113,4 +113,4 @@
     }
     content((note-x, y), note(r.at(3)), anchor: "west")
   }
-})
+}))

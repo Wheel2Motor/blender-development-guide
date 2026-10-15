@@ -39,9 +39,9 @@
 //  引入本文件的，在模块顶层放 `#set page(...)` 一旦被改成 `#include` 就会炸整本书版面。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-summary, c-pitfall
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-summary, c-pitfall, html-figure
 
-#let fig-render-pipeline() = canvas(length: 1cm, {
+#let fig-render-pipeline() = html-figure("fig-render-pipeline", () => canvas(length: 1cm, {
   import draw: *
 
   let ink = luma(18%)
@@ -288,4 +288,4 @@
     text(font: font-zh, size: 5.9pt, fill: faint)[视图层（ViewLayer）是「一次渲染里的独立图层」，引擎在 RE_engine_render() 里逐层调用 render 回调。],
     anchor: "west",
   )
-})
+}))

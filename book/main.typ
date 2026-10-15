@@ -66,33 +66,51 @@
 #set heading(numbering: none)
 
 #show heading.where(level: 1): it => {
-  pagebreak(weak: true)
-  v(0.4em)
-  block(width: 100%)[
-    #set text(font: font-zh, size: 19pt, weight: 700, fill: c-part)
-    #it.body
-    #v(0.35em)
-    #line(length: 100%, stroke: 1.1pt + c-part)
-  ]
-  v(0.5em)
+  context {
+    if target() == "html" {
+      it
+    } else {
+      pagebreak(weak: true)
+      v(0.4em)
+      block(width: 100%)[
+        #set text(font: font-zh, size: 19pt, weight: 700, fill: c-part)
+        #it.body
+        #v(0.35em)
+        #line(length: 100%, stroke: 1.1pt + c-part)
+      ]
+      v(0.5em)
+    }
+  }
 }
 
 #show heading.where(level: 2): it => {
-  v(0.75em)
-  block(width: 100%)[
-    #set text(font: font-zh, size: 14pt, weight: 700, fill: black)
-    #it.body
-  ]
-  v(0.15em)
+  context {
+    if target() == "html" {
+      it
+    } else {
+      v(0.75em)
+      block(width: 100%)[
+        #set text(font: font-zh, size: 14pt, weight: 700, fill: black)
+        #it.body
+      ]
+      v(0.15em)
+    }
+  }
 }
 
 #show heading.where(level: 3): it => {
-  v(0.55em)
-  block(width: 100%)[
-    #set text(font: font-zh, size: 11.5pt, weight: 700, fill: luma(15%))
-    #it.body
-  ]
-  v(0.05em)
+  context {
+    if target() == "html" {
+      it
+    } else {
+      v(0.55em)
+      block(width: 100%)[
+        #set text(font: font-zh, size: 11.5pt, weight: 700, fill: luma(15%))
+        #it.body
+      ]
+      v(0.05em)
+    }
+  }
 }
 
 // 代码块：底色 + 左侧色条，可跨页。字体走 font-code（Noto Sans Mono CJK SC）——
@@ -140,13 +158,20 @@
 // 这类缺陷是「纵向重叠」，横向的版心溢出扫描查不出来，所以必须从根上允许分页。
 #show figure: set block(breakable: true)
 
-#show figure.caption: it => block(
-  width: 100%,
-  above: 0.35em,
-)[
-  #set text(font: font-zh, size: 9pt, fill: luma(25%))
-  #align(center)[#it]
-]
+#show figure.caption: it => context {
+  if target() == "html" {
+    // Keep Typst's semantic <figcaption>; paged-only align/layout rules erase it in HTML.
+    it
+  } else {
+    block(
+      width: 100%,
+      above: 0.35em,
+    )[
+      #set text(font: font-zh, size: 9pt, fill: luma(25%))
+      #align(center)[#it]
+    ]
+  }
+}
 
 // 表格与图分开编号，增补词用「表」。用法：
 //   #figure(kind: table, table(...), caption: [...])

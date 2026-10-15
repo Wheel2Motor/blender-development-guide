@@ -20,9 +20,9 @@
 //  排版注意：本图宽 15.6cm（版心 16.4cm）。改动任何文字后必须重渲染确认不重叠。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, html-figure
 
-#let fig-dna-rna-pipeline() = canvas(length: 1cm, {
+#let fig-dna-rna-pipeline() = html-figure("fig-dna-rna-pipeline", () => canvas(length: 1cm, {
   import draw: *
 
   let z(x) = text(font: font-zh, size: 6.2pt, weight: 400, fill: luma(18%))[#x]
@@ -222,4 +222,4 @@
       `makesrna` 还链接 `bf_dna_defaults`，用 DNA 结构体的默认成员初始化值填 RNA 默认值
     ],
   )
-})
+}))

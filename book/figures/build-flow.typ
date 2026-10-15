@@ -14,9 +14,9 @@
 //   - build_files/cmake/platform/platform_apple.cmake:504  macOS 产物是 Blender.app 包
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, c-source
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, c-source, html-figure
 
-#let fig-build-flow() = canvas(length: 1cm, {
+#let fig-build-flow() = html-figure("fig-build-flow", () => canvas(length: 1cm, {
   import draw: *
 
   let col-x = (1.9, 4.6, 7.3, 10.0, 12.7)   // 5 个阶段的左边界（列间留 0.25 给推进箭头）
@@ -73,4 +73,4 @@
       )
     }
   }
-})
+}))

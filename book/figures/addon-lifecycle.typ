@@ -49,9 +49,9 @@
 //   - scripts/modules/addon_utils.py:610    _addon_remove()：从 preferences.addons 移除
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-pitfall, c-primary
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-pitfall, c-primary, html-figure
 
-#let fig-addon-lifecycle() = canvas(length: 1cm, {
+#let fig-addon-lifecycle() = html-figure("fig-addon-lifecycle", () => canvas(length: 1cm, {
   import draw: *
 
   // 布局常量（单位：cm）。宽度由 measure() 实测后定，改字号必须重新实测。
@@ -183,4 +183,4 @@
     text(font: font-zh, size: 6.5pt, weight: 400, fill: luma(35%))[不重新导入模块],
     anchor: "center",
   )
-})
+}))

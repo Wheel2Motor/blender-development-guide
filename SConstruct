@@ -25,7 +25,7 @@ ROOT = Path(Dir("#").abspath)
 
 COMMANDS = {
     "init-book": ("tools/init_book.py", "Prepare Typst, pinned fonts, and the book workspace."),
-    "build-book": ("tools/build_book.py", "Build the PDF; optionally render and verify every page."),
+    "build-book": ("tools/build_book.py", "Build the PDF or experimental HTML output."),
     "init-blender": (
         "tools/init_blender.py",
         "Fetch/check pinned Blender sources and required pre-build dependencies.",
@@ -33,6 +33,10 @@ COMMANDS = {
     "build-blender": (
         "tools/build_blender.py",
         "Configure and build Blender with the native upstream workflow.",
+    ),
+    "bump-version": (
+        "tools/version_mgr.py",
+        "Bump the book version and promote pending release notes.",
     ),
 }
 
@@ -46,12 +50,14 @@ Usage:
 
 Commands:
   init-book             Check Typst and prepare either project or system fonts.
-  build-book            Build the book PDF.
+  build-book            Build the book as PDF (default) or experimental HTML.
   init-blender          Fetch/check pinned Blender sources and dependencies.
   build-blender         Configure and build Blender.
+  bump-version          Bump the book version and promote Pending release notes.
   help                  Print this command list and the supported options.
 
 Book options:
+  --format=FORMAT       Output format: pdf (default) or html (experimental).
   --check               Render every page and scan for margin overflow.
   --release             Build the public PDF plus examples/ release directory.
   --use-system-fonts    Skip project font download/use installed OS font fallbacks.
@@ -67,21 +73,30 @@ Blender options:
   --allow-other-revision    Permit a source HEAD different from the pinned baseline.
   -j N, --jobs=N            Forward the explicit parallel job count to Blender.
 
+Version options (choose exactly one with bump-version):
+  --major               Bump X.y.z to X+1.0.0.
+  --minor               Bump x.Y.z to x.Y+1.0.
+  --micro               Bump x.y.Z to x.y.Z+1.
+
 Examples:
   scons init-book
   scons init-book --use-system-fonts
   scons build-book
+  scons build-book --format=html
   scons build-book --check
   scons build-book --use-system-fonts
   scons build-book --release
   scons build-book --release --check
   scons init-blender
   scons build-blender --blender-config=Debug -j 12
+  scons bump-version --minor
 """
 
 
 AddOption("--check", dest="book_check", action="store_true", default=False,
           help="render every book page and run the overflow scan")
+AddOption("--format", dest="book_format", type="choice", choices=("pdf", "html"),
+          default="pdf", help="book output format: pdf or experimental html")
 AddOption("--release", dest="book_release", action="store_true", default=False,
           help="build the public PDF plus examples/ release directory")
 AddOption("--use-system-fonts", dest="use_system_fonts", action="store_true", default=False,
@@ -102,6 +117,12 @@ AddOption("--configure-only", dest="configure_only", action="store_true", defaul
 AddOption("--allow-other-revision", dest="allow_other_revision",
           action="store_true", default=False,
           help="allow Blender source HEAD to differ from the pinned baseline")
+AddOption("--major", dest="version_major", action="store_true", default=False,
+          help="bump the book's major version")
+AddOption("--minor", dest="version_minor", action="store_true", default=False,
+          help="bump the book's minor version")
+AddOption("--micro", dest="version_micro", action="store_true", default=False,
+          help="bump the book's micro version")
 
 
 def _option_was_explicit(*names: str) -> bool:
@@ -117,6 +138,8 @@ def _option_was_explicit(*names: str) -> bool:
 def _script_args(alias: str) -> list[str]:
     args: list[str] = []
     if alias == "build-book":
+        if not GetOption("book_release"):
+            args.extend(("--format", GetOption("book_format")))
         if GetOption("book_check"):
             args.append("--check")
         if GetOption("use_system_fonts"):
@@ -145,6 +168,14 @@ def _script_args(alias: str) -> list[str]:
             args.append("--allow-other-revision")
         if _option_was_explicit("-j", "--jobs"):
             args.extend(("--jobs", str(GetOption("num_jobs"))))
+    elif alias == "bump-version":
+        for option, dest in (
+            ("--major", "version_major"),
+            ("--minor", "version_minor"),
+            ("--micro", "version_micro"),
+        ):
+            if GetOption(dest):
+                args.append(option)
     return args
 
 
@@ -156,7 +187,32 @@ def _display(command: list[str]) -> str:
 
 def _run_script(target, source, env) -> int:  # noqa: ANN001
     alias = env["ENTRY_ALIAS"]
+    version_flags = [
+        name
+        for name, enabled in (
+            ("--major", GetOption("version_major")),
+            ("--minor", GetOption("version_minor")),
+            ("--micro", GetOption("version_micro")),
+        )
+        if enabled
+    ]
+    if alias == "bump-version" and len(version_flags) != 1:
+        print("[FAIL] bump-version requires exactly one of "
+              "--major, --minor, or --micro.")
+        return 2
+    if alias != "bump-version" and version_flags:
+        print("[FAIL] --major, --minor, and --micro only apply to bump-version.")
+        return 2
     release = alias == "build-book" and GetOption("book_release")
+    book_format = GetOption("book_format")
+    if alias == "build-book" and book_format == "html" and GetOption("book_check"):
+        print("[FAIL] --check only applies to paged PDF output; "
+              "it cannot be combined with --format=html.")
+        return 2
+    if release and book_format != "pdf":
+        print("[FAIL] --release only packages the PDF edition; "
+              "it cannot be combined with --format=html.")
+        return 2
     if release and GetOption("use_system_fonts"):
         print("[FAIL] --release and --use-system-fonts are mutually exclusive; "
               "release builds require pinned project fonts.")

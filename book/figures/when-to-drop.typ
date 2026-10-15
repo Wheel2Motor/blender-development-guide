@@ -16,9 +16,9 @@
 //      必须重新 `typst compile --root . --format png --ppi 150` 目视确认。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, c-part, c-note, c-tip, c-warn, c-pitfall
+#import "../common.typ": font-zh, c-part, c-note, c-tip, c-warn, c-pitfall, html-figure
 
-#let fig-when-to-drop() = canvas(length: 1cm, {
+#let fig-when-to-drop() = html-figure("fig-when-to-drop", () => canvas(length: 1cm, {
   import draw: *
 
   // 主链的四个判定框：y 坐标自上而下递减。
@@ -146,4 +146,4 @@
   content(((x1 + rx0) / 2, y-d + h / 2 + 0.18),
     text(font: font-zh, size: 8pt, weight: 700, fill: c-part)[仍然不够],
     anchor: "south")
-})
+}))

@@ -5,7 +5,7 @@
 
 > **首次接手**：先跑 `scons init-book`（检查 Typst、**下载字体到
 > `book/fonts/`**、目录骨架、cetz 宏包预取），再跑 `scons build-book`。
-> **`init-book` 不构建书稿** —— 出 PDF 是 `build-book` 的职责。
+> **`init-book` 不构建书稿** —— PDF 或实验性 HTML 都由 `build-book` 生成。
 > `build-book` 也绝不下载字体：它先按 `.manifest.json` 做只读预检，缺失、损坏或哈希
 > 不符就非零退出并引导运行 `init-book`。`init-book` 下载到临时目录，校验通过后才原子
 > 安装，不要求人工解压或搬运文件。
@@ -13,7 +13,7 @@
 > （约 7 GB，很久），随后用 `scons build-blender` 生成工程并编译。
 > `init-blender` 负责源码与官方要求在构建前额外准备的依赖；`build-blender` 自身只核验、
 > 配置和构建，
-> 但不屏蔽 Blender 上游构建脚本原有的依赖懒下载行为。五组动作由根目录
+> 但不屏蔽 Blender 上游构建脚本原有的依赖懒下载行为。六个 alias 由根目录
 > `SConstruct` 提供 alias 与 `build-book --release` 模式，逻辑仍在 `tools/` 下的对应 `.py` 里。
 
 ## 一、先读这四份
@@ -43,7 +43,8 @@
 
 ```bash
 python qa/check_examples.py           # 完整示例脚注、文件覆盖与 Python 语法
-scons build-book                      # ① 编译（必须零 error 零 warning）
+scons build-book                      # ① 默认编译 PDF（必须零 error 零 warning）
+scons build-book --format=html        # 实验性 HTML：先生成 SVG、网页字体与样式
 scons build-book --check              # ② + ③ 逐页渲染 + 版心溢出扫描（约十分钟）
 ```
 
@@ -177,7 +178,9 @@ python qa/check_markdown.py
 - 升级基准不能只修改版本字符串。更新 `book/blender-baseline.json` 后，必须重新核对
   源码引用、版本相关结论、命令输出和截图；书中保留的旧版本兼容性示例不要机械替换。
 - 书籍自身版本由 `book/meta.json` 唯一定义，与 Blender 基准版本分开维护；封面小字
-  直接读取该字段，发布书稿时不要在 Typst 源码中手写版本号。
+  直接读取该字段，发布书稿时不要在 Typst 源码中手写版本号，也不要直接改 JSON。
+  先把改动写入根目录 `RELEASE_NOTE.md` 的 `Pending` 无序列表，再运行
+  `scons bump-version --major|--minor|--micro`（实际命令只选一个开关）。
 - 图片资源：`book/res/`（**平铺，无子目录**）。章节里的相对路径写 `../res/xxx.png`。
   采集脚本是 `tools/capture_screenshots.py`，**需要 GUI**，
   用同级的 `tools/example_addon/` 里那个自写插件做界面元素；它把新截图直接写进
@@ -190,13 +193,14 @@ python qa/check_markdown.py
 
 | 工具 | 用途 |
 |---|---|
-| `SConstruct` | 五个跨平台 alias：`init-book`、`build-book`、`init-blender`、`build-blender`、`help`；`build-book --release` 负责发布构建；SCons 只编排 `tools/` 下的 Python 逻辑 |
+| `SConstruct` | 六个跨平台 alias：`init-book`、`build-book`、`init-blender`、`build-blender`、`bump-version`、`help`；`build-book --release` 负责发布构建；SCons 只编排 `tools/` 下的 Python 逻辑 |
 | `tools/init_book.py` | 检查 Typst；默认 **下载并校验 `book/fonts/` 里的字体**（幂等），`--use-system-fonts` 时跳过下载并检查系统候选；建目录骨架并用 **临时探针** 预取 cetz 宏包。**不构建书稿**（入口：`scons init-book`） |
-| `tools/build_book.py` | 默认只读核验项目字体后构建 PDF；`--use-system-fonts` 可显式选择系统 fallback；`--check` 再做逐页渲染 + 溢出扫描（入口：`scons build-book`） |
+| `tools/build_book.py` | 默认构建 PDF；`--format=html` 先生成 `book/build/res/*.svg` 与可选网页字体，再编译 HTML 并嵌入 `book/html/style.css`；`--use-system-fonts` 可显式选择系统 fallback；PDF 的 `--check` 再做逐页渲染 + 溢出扫描（入口：`scons build-book`） |
 | `tools/build_book_release.py` | 检查示例、构建 PDF，并生成顶层仅含 PDF 与 `examples/` 的书籍发布目录（入口：`scons build-book --release`） |
 | `tools/blender_baseline.py` | 读取并校验 `book/blender-baseline.json`，供 Blender 初始化与源码引用检查共用 |
 | `tools/init_blender.py` | 拉取/核对 Blender 源码，在官方要求额外前置步骤的平台准备 `lib/` 预编译库，并探测工具链门槛（入口：`scons init-blender`） |
 | `tools/build_blender.py` | 只读核验已初始化的源码与依赖，生成 out-of-source CMake 工程并构建；Windows 生成并构建 Visual Studio solution（入口：`scons build-blender`） |
+| `tools/version_mgr.py` | 校验语义版本与发布说明，提升 `book/meta.json` 中的版本，并将 `Pending` 列表原子迁移到最新发布记录（入口：`scons bump-version --major|--minor|--micro`） |
 | `tools/check_overflow.py` | 逐页扫描版心外墨迹（**横向溢出**） |
 | `tools/fix_typst_syntax.py` | 修正 Markdown 残留（`**粗**`、`###` 标题），**自动跳过代码块** |
 | `tools/capture_screenshots.py` | 实机截图采集（**需要 GUI**，写进 `book/res/`） |
@@ -206,7 +210,12 @@ python qa/check_markdown.py
 根目录只保留一个 `SConstruct` 跨平台入口，alias 与参数必须同步维护在 `scons help`、
 根 `README.md` 和对应构建文档中。SCons 只负责编排，不应复制 `tools/` 中的业务逻辑。
 `--release` 与 `--use-system-fonts` 必须保持互斥；发布包只能使用项目固定字体。
+`--format=html` 不能与 `--check` 或 `--release` 组合；HTML 只放行 Typst 已知的实验导出
+警告。新增 `book/figures/<name>.typ` 时必须导出零参数 `fig-<name>()`；章节内直接写
+`figure(canvas(...))` 时必须带唯一 `<fig-...>` 标签，供 HTML 资源构建器发现。
 `init-book` 的 `--force` 与 `--use-system-fonts` 也互斥，因为系统字体模式没有项目字体可重验。
+`bump-version` 必须且只能使用 `--major`、`--minor`、`--micro` 之一；发布说明只允许
+`# Release Note`、`# Pending` 两个一级标题，待发布内容使用无序列表。
 **`tools/` 下所有脚本面向用户的输出一律用英文** —— `print` / `sys.exit` / `argparse`
 的 `description` 与 `help` 都算；注释可以是中文。这条不只是"乱码不好看"：GBK 控制台下
 输出非 ASCII 会抛 `UnicodeEncodeError`，**连错误提示都打不出来**（`check_overflow.py`

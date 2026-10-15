@@ -10,9 +10,9 @@
 //  改动字号或篇名后必须重新渲染确认不重叠。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, html-figure
 
-#let fig-roadmap() = canvas(length: 1cm, {
+#let fig-roadmap() = html-figure("fig-roadmap", () => canvas(length: 1cm, {
   import draw: *
 
   // (y, 篇号, 篇名, 章节说明, 颜色)
@@ -43,4 +43,4 @@
   // 篇与篇之间的推进箭头
   line((1.5, 5.0), (1.5, 4.4), mark: (end: ">"), stroke: 1pt + luma(42%))
   line((1.5, 2.7), (1.5, 2.1), mark: (end: ">"), stroke: 1pt + luma(42%))
-})
+}))

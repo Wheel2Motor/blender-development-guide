@@ -66,6 +66,14 @@ python qa/check_examples.py
 scons build-book --check
 ```
 
+该检查针对正式 PDF。HTML 只做构建冒烟检查：
+
+```bash
+scons build-book --format=html
+```
+
+HTML 不分页，不能与 `--check` 或 `--release` 组合。
+
 ## 不应提交的内容
 
 以下内容不应放进仓库，也不应作为历史档案保存在说明文档中：

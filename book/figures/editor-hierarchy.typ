@@ -27,9 +27,9 @@
 //  改字号或文字长度后必须重新渲染并量"文字框 vs 框边界"，不要只看代码坐标。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, html-figure
 
-#let fig-editor-hierarchy() = canvas(length: 0.85cm, {
+#let fig-editor-hierarchy() = html-figure("fig-editor-hierarchy", () => canvas(length: 0.85cm, {
   import draw: *
 
   let ink = luma(20%)
@@ -233,4 +233,4 @@
     text(font: font-zh, size: 5.4pt, fill: faint)[regiontypes 串起 ARegionType → PanelType / HeaderType],
     anchor: "west",
   )
-})
+}))

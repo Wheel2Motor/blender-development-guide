@@ -101,6 +101,17 @@
   (font-mono, font-mono-cjk, font-fallback)
 }
 
+// Cetz currently targets paged output. The HTML build pre-renders every maintained
+// diagram to build/res/fig-*.svg, then this helper emits a semantic external image.
+// The callback is intentionally lazy: HTML export must not evaluate the Cetz canvas.
+#let html-figure(name, draw) = context {
+  if target() == "html" {
+    html.img(src: "res/" + name + ".svg", alt: "", loading: "lazy")
+  } else {
+    draw()
+  }
+}
+
 #let c-primary = rgb("#1f6feb")
 #let c-note = rgb("#1f6feb")
 #let c-tip = rgb("#1a7f37")

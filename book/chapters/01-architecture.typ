@@ -694,7 +694,7 @@ static void do_render_full_pipeline(Render *re)
 *合成器 + 引擎*（默认路径）。第三条分支展开成：
 
 #figure(
-  canvas(length: 1cm, {
+  html-figure("fig-offline-pipeline", () => canvas(length: 1cm, {
     import draw: *
     set-style(stroke: (paint: luma(72%), thickness: 0.35pt))
 
@@ -752,7 +752,7 @@ static void do_render_full_pipeline(Render *re)
     lbl(7.85, 4.0, "do_write_image_or_movie()")
 
     line((0.0, 1.2), (11.8, 1.2), stroke: 0.8pt + c-part)
-  }),
+  })),
   caption: [一次离线渲染的管线。上部两个框是调度入口；三条分支里只有"引擎 + 合成器"是默认路径，另外两条会接管全部渲染工作。],
 ) <fig-offline-pipeline>
 
@@ -1056,7 +1056,7 @@ void wm_event_do_refresh_wm_and_depsgraph(bContext *C)
 === 1.5.8 整条链
 
 #figure(
-  canvas(length: 0.98cm, {
+  html-figure("fig-e2e-chain", () => canvas(length: 0.98cm, {
     import draw: *
     set-style(stroke: (paint: luma(72%), thickness: 0.35pt))
 
@@ -1143,7 +1143,7 @@ void wm_event_do_refresh_wm_and_depsgraph(bContext *C)
       ]),
       anchor: "north-west",
     )
-  }),
+  })),
   caption: [一次"改参数 → 界面刷新 → 渲染出图"的完整链条。方框上方标着序号，下方是老老实实的函数名。],
 ) <fig-e2e-chain>
 

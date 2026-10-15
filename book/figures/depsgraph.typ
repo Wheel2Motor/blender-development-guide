@@ -32,9 +32,9 @@
 //  之间留了 >= 0.16 的净空。改动任何文字后必须重新渲染确认不溢出、不重叠。
 // ============================================================================
 #import "@preview/cetz:0.3.4": canvas, draw
-#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, c-summary, c-pitfall
+#import "../common.typ": font-zh, font-mono, c-part, c-tip, c-warn, c-primary, c-summary, c-pitfall, html-figure
 
-#let fig-depsgraph() = canvas(length: 1cm, {
+#let fig-depsgraph() = html-figure("fig-depsgraph", () => canvas(length: 1cm, {
   import draw: *
 
   let ink = luma(18%)
@@ -372,4 +372,4 @@
     text(font: font-mono, size: 5.5pt, fill: faint)[DEG_get_evaluated_scene / DEG_get_evaluated_view_layer / DEG_get_original_id / DEG_is_original_id],
     anchor: "west",
   )
-})
+}))

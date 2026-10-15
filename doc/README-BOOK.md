@@ -50,6 +50,27 @@ scons init-book --check-only
 scons build-book
 ```
 
+默认格式是 PDF。实验性 HTML 构建使用：
+
+```bash
+scons build-book --format=html
+```
+
+构建顺序固定为：发现书稿中的 Cetz 图表 → 将每张图单独导出为
+`book/build/res/fig-*.svg` → 准备网页字体资源 → 编译 HTML → 嵌入
+`book/html/style.css`。图表通过相对路径引用这些 SVG，不依赖 Typst 尚未完成的 Cetz
+HTML 布局支持。`book/figures/*.typ` 中的 `fig-<文件名>()` 会自动发现；章节中直接书写的
+`figure(canvas(...))` 也会扫描，但必须带唯一的 `<fig-...>` 标签。
+
+默认项目字体模式会把清单中 8 个已校验字体及其 OFL 许可复制到 `book/build/res/`，并生成对应的
+`@font-face`。使用 `--use-system-fonts` 时只生成 SVG，不复制字体，网页改用
+`style.css` 中的 Windows、macOS 与 Linux fallback。HTML、SVG 和字体共同构成网页产物，
+移动 HTML 时应连同同级的 `res/` 一起移动。
+
+Typst 官方仍将 HTML 导出标记为实验功能；构建器只放行“HTML 功能尚不完整”和分页布局
+元素被忽略这两类已知警告，其他 warning 或任何 error 都会失败。`--check` 依赖 PDF
+分页，`--release` 也只发布 PDF，因此两者不能与 `--format=html` 组合。
+
 构建脚本不会联网下载或修复字体。它会在调用 Typst 前按清单进行只读预检；任何字体缺失、
 损坏或哈希不符都会立即停止，并提示先运行 `scons init-book`。初始化成功
 后再次构建即可，不存在需要人工处理字体文件的中间步骤。
@@ -60,9 +81,9 @@ scons build-book
 scons build-book --check
 ```
 
-构建产物位于 `book/build/blender-development-guide.pdf`。脚本会打印绝对路径、文件大小、
-页数及 Typst 的 error / warning 数量。任何 error 或 warning 都会使构建以非零状态退出，
-即使 Typst 已经生成 PDF；交付标准始终是零诊断。
+PDF 构建产物位于 `book/build/blender-development-guide.pdf`。脚本会打印绝对路径、文件大小、
+页数及 Typst 的 error / warning 数量。PDF 的任何 error 或 warning 都会使构建以非零状态
+退出，即使 Typst 已经生成文件；正式交付标准始终是零诊断。
 
 对外发布时不要直接复制整个 `book/build/`。运行：
 
@@ -94,6 +115,7 @@ typst compile --font-path fonts --ignore-system-fonts --ignore-embedded-fonts \
 ```bash
 scons build-book --use-system-fonts
 scons build-book --check --use-system-fonts
+scons build-book --format=html --use-system-fonts
 ```
 
 如果尚未初始化，先运行 `scons init-book --use-system-fonts`；初始化和构建使用同一套候选
@@ -122,17 +144,35 @@ blender-baseline.json  Blender 版本、分支、标签与 commit 的唯一配�
 front-matter.typ 前言
 chapters/        18 章与附录 A–F
 figures/         cetz 矢量图定义
+html/            HTML 样式表
 res/             平铺存放的位图与截图
 examples/        随书完整代码案例
 fonts/           项目字体、清单和许可文件
-build/           PDF 与逐页 PNG
+build/           PDF、HTML、网页 res/ 与逐页 PNG
 ```
 
 Typst 的 `#set` 与 `#show` 只在声明文件内生效。章节必须通过 `#include` 拼入
 `main.typ`，不要把全局样式放入 `common.typ` 后期待 `#import` 传播样式。
 
-书籍版本与 Blender 基准版本彼此独立。发布书稿版本时修改 `meta.json`；升级技术核对基准时
-修改 `blender-baseline.json`，并按 Blender 构建文档重新完成源码、行为与截图验证。
+书籍版本与 Blender 基准版本彼此独立。发布书稿版本时通过下述命令更新 `meta.json`；
+升级技术核对基准时修改 `blender-baseline.json`，并按 Blender 构建文档重新完成源码、
+行为与截图验证。
+
+### 版本号与发布说明
+
+不要直接编辑 `meta.json` 来发布新版本。先把本次改动逐条写成无序列表，放到根目录
+`RELEASE_NOTE.md` 的 `Pending` 一级标题下，再选择一种版本提升：
+
+```bash
+scons bump-version --major
+scons bump-version --minor
+scons bump-version --micro
+```
+
+三个开关互斥且必须恰好选择一个，分别重置或递增 `MAJOR.MINOR.MICRO` 的对应部分。
+命令会先完整校验版本号和发布说明，再同步更新 `book/meta.json`，并在
+`Release Note` 段最前面建立新版本二级标题、迁移全部 `Pending` 列表项。没有待发布条目、
+标题结构不正确或目标版本已经存在时都会停止，避免生成空版本或覆盖既有记录。
 
 ## 四、Typst 语法规则
 
@@ -155,7 +195,8 @@ Typst 的 `#set` 与 `#show` 只在声明文件内生效。章节必须通过 `#
   新增路径渲染函数时必须保持这一行为。
 - 图片路径相对调用它的章节文件解析。章节引用 `book/res/` 中资源时使用
   `../res/<文件名>`。
-- `book/res/` 平铺存放位图；`book/figures/` 保存 cetz 图定义，两者不能混用。
+- `book/res/` 平铺存放书稿位图；`book/figures/` 保存 cetz 图定义，两者不能混用。
+  `book/build/res/` 是 HTML 构建自动生成的 SVG 与字体目录，不得手工维护或提交。
 
 ## 六、字体
 
@@ -201,3 +242,5 @@ Typst 的 `#set` 与 `#show` 只在声明文件内生效。章节必须通过 `#
 4. 抽查受影响页面，确认没有纵向重叠、裁切或图形语义错误。
 5. 确认 PDF 只嵌入项目字体，没有系统字体回退。
 6. 确认全文无 `#todo` 占位，目录、章节及图表编号正确。
+7. 发布版本时，确认 `RELEASE_NOTE.md` 的 `Pending` 条目完整，再运行一次对应的
+   `scons bump-version` 命令。

@@ -18,7 +18,7 @@
     python tools/init_book.py --check-only  # 只检查，不下载、不编译
     python tools/init_book.py --force       # 忽略 manifest，重新校验/下载
 
-**本脚本不构建书稿。** 出 PDF 是 ``tools/build_book.py`` 的职责。历史上的
+**本脚本不构建书稿。** PDF 与实验性 HTML 都由 ``tools/build_book.py`` 负责。历史上的
 init 会编译一次全书来预取 cetz，那既慢又会让"初始化"意外产生 PDF；现在改成
 在临时目录里编译一个三行的探针文件（见 ``prefetch_cetz``）。
 
@@ -906,7 +906,7 @@ def main() -> int:
     print("Mode         : %s" % mode)
     print("=" * 70)
     say(INFO, "This script prepares the environment. It does NOT build the book;")
-    say(INFO, "run 'scons build-book' for the PDF.")
+    say(INFO, "run 'scons build-book' for PDF or add '--format=html' for experimental HTML.")
     say(INFO, "Tools are CHECKED only: this script never installs Typst, Python, SCons, or other tools.")
     if args.use_system_fonts:
         say(INFO, "Project font downloads are disabled (--use-system-fonts).")
@@ -943,6 +943,10 @@ def main() -> int:
     if args.use_system_fonts:
         build_command += " --use-system-fonts"
     say(INFO, "Build the book with: %s" % build_command)
+    html_command = "scons build-book --format=html"
+    if args.use_system_fonts:
+        html_command += " --use-system-fonts"
+    say(INFO, "Build experimental HTML with: %s" % html_command)
     verify_command = "scons build-book --check"
     if args.use_system_fonts:
         verify_command += " --use-system-fonts"
