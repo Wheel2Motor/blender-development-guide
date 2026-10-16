@@ -137,10 +137,12 @@ DNA 层的*源头*是 `source/blender/makesdna/` 里的 97 个 `DNA_*.h`
 固定宽度的整数、`float`、`char` 数组和指针，不能用 C++ 的类、模板、
 `std::vector`。原因就是上面那条 —— 内存布局必须可预测、跨平台可复现。
 
-读文件时的入口是 #src("source/blender/makesdna/intern/dna_genfile.cc:558") 的
-`DNA_sdna_from_data()`，写入侧由 #src("source/blender/blenloader/BLO_writefile.hh:57")
-的 `BLO_write_file()` 统一负责，读取侧入口是
-#src("source/blender/blenloader/BLO_readfile.hh:175") 的 `BLO_read_from_file()`。
+这里需要区分*整份文件的读取入口*和*SDNA 数据的解析函数*。
+本书后文所说的“`.blend` 读取入口”，默认是 `blenloader` 对磁盘文件公开的 #src("source/blender/blenloader/BLO_readfile.hh:175") `BLO_read_from_file()`；它负责打开并读取整份 `.blend` 文件。
+内部读取链路随后在 #src("source/blender/blenloader/intern/readfile.cc:871-L903") `read_file_dna()` 中找到 `DNA1` 数据块，再把块中的字节交给 #src("source/blender/makesdna/intern/dna_genfile.cc:558") `DNA_sdna_from_data()`；后者只负责把这段编码后的 SDNA 数据解析成 `SDNA` 结构，并不是整份文件的入口。
+简化后的关系是：
+`BLO_read_from_file()` → `read_file_dna()` → `DNA_sdna_from_data()`。
+与整文件读取对应的写入入口是 #src("source/blender/blenloader/BLO_writefile.hh:57") `BLO_write_file()`。
 
 #pitfall[
   "我在 `DNA_object_types.h` 里给 `Object` 加了一个字段，为什么读老文件会崩？"
