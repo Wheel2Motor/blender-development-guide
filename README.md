@@ -55,27 +55,30 @@ scons build-book --use-system-fonts
 该模式会从当前 Windows、macOS 或 Linux 的候选列表中选择本机实际存在的字体，因此结果
 不保证跨机器一致，不应用于正式发布。
 
-初始化入口只允许下载项目数据，不安装系统工具。尤其是 Typst：脚本只检查
-`tools/bin/typst[.exe]` 和 `PATH`，找不到时会打印官方安装方式并以非零状态退出，绝不会
-自动下载或调用包管理器。首次预取 cetz 时，Typst 自身仍会使用其正常的包缓存机制。
-
 需要修改技术内容时，再准备 Blender 源码、依赖和工具链：
 
 ```bash
-scons init-blender       # 源码下载到 blender/
+scons init-blender       # 源码与依赖下载到 blender/
 scons build-blender      # 生成本机 CMake 工程并构建
 ```
 
-`init-blender` 负责源码、工具链检查，以及官方要求在构建前额外准备的平台依赖；
-Git 与 Git LFS 长操作会实时显示进度。
+`init-blender` 负责源码、主仓库 LFS 内容、所有平台（含 Windows）的预编译库，以及
+工具链检查；Git 与 Git LFS 长操作会实时显示进度。
 `build-blender` 本身只核验初始化结果、生成工程和编译，不主动执行 `update` 或
-Git `fetch`。Windows 上的平台库由 Blender 上游 `make.bat` 自动检测并在需要时询问
-下载，因此 `init-blender` 不重复拉取；Linux/macOS 上构建前必须额外准备的库仍由
-`init-blender` 处理。
+Git `fetch`；三者缺一就在 configure 前失败并指回 `scons init-blender`。
+Windows 平台的库也由 `init-blender` 非交互准备（等价于 `make.bat` 询问时回答 y），
+所以 `make.bat` 的询问只有在库仍缺失时才会出现。
 Windows 构建入口仅使用 MSVC，并通过 `vswhere` 自动定位 Visual Studio；可以从普通
 `cmd.exe` 启动，不要求预先打开 Developer Command Prompt。
 Windows 默认生成并构建 `build_windows/Blender.sln`（新工具链也可能生成 `.slnx`）；
 macOS/Linux 默认使用 `build_macos/` 或 `build_linux/`。
+
+官方仓库拉不动时，`init-blender` 可以换主仓库来源，`--mirror` 默认就是 `official`：
+`--mirror=github` 走 GitHub 官方镜像，`--mirror=gitee` 走 Gitee 第三方镜像（同步状态由
+维护者决定，脚本会先核验基准分支与提交，落后就失败），`--mirror-url=URL` 指向自建镜像。
+镜像只换主仓库地址，`lib/` 平台库与 Git LFS 数据仍来自 `projects.blender.org`（`init-blender`
+会把主仓库的 LFS 内容补齐，因为上游 configure 会拒绝指针形态的 `startup.blend`），
+构建命令不变；细节见 [README-BLENDER.md](doc/README-BLENDER.md)。
 
 提交前运行：
 
@@ -97,6 +100,20 @@ scons build-book --release
 还会执行逐页渲染与版心溢出扫描。发布构建必须使用项目固定字体，因此 `--release` 与
 `--use-system-fonts` 互斥。
 
+## 环境边界
+
+初始化入口只往工程目录写可重新获取的数据，从不安装系统工具、不调用包管理器、不写系统
+目录，也不下载任何命令行可执行文件：
+
+- 字体 → `book/fonts/`（`init-book` 下载、校验后安装）
+- Blender 源码、主仓库 Git LFS 内容与 `lib/<平台>_<架构>` → `blender/`（`init-blender`）
+- cetz 宏包 → Typst 自己的包缓存（由 Typst 在预取时拉取，项目不代管）
+
+`scons`、`typst`、`git`、`cmake`、`ninja`、编译器与 Python 只 **检查**：必需项缺失时打印
+官方安装命令并 **非零退出**，可选项（`ninja`、`pdfinfo`、Pillow、`fontTools`）缺失只降级
+功能、不影响退出码；`git-lfs` 视是否需要拉取 `lib/` 或主仓库 LFS 定为必需或仅提示。
+Typst 自身不会被下载：脚本只查 `tools/bin/typst[.exe]` 与 `PATH`，找不到即报错退出。
+
 ## 项目文档
 
 - [书稿规格](doc/BOOK-SPEC.md)：章节结构、内容范围和交付标准。
@@ -112,12 +129,13 @@ scons build-book --release
 |---|---|
 | `scons init-book` | 检查 Typst、准备书稿环境；默认下载项目字体，`--use-system-fonts` 时跳过 |
 | `scons build-book` | 只读预检字体并构建 PDF（默认）或实验性 HTML |
-| `scons init-blender` | 拉取固定 Blender 源码、检查工具链，并准备官方要求的构建前依赖 |
-| `scons build-blender` | 生成 Blender CMake 工程并完成本机构建 |
+| `scons init-blender` | 拉取固定 Blender 源码（`--mirror` 可换官方/GitHub/Gitee 来源）、还原主仓库 LFS、在所有平台准备 `lib/` 预编译库并检查工具链 |
+| `scons build-blender` | 核验源码/LFS/依赖后生成 Blender CMake 工程并完成本机构建 |
 | `scons bump-version` | 提升书籍版本，并把 `Pending` 列表移到发布说明最前面 |
 | `scons help` | 打印全部 alias、参数与示例 |
 
-SCons 只负责编排；实际跨平台逻辑仍位于 `tools/` 下的 Python 脚本中。常用参数示例：
+SCons 只负责编排；实际跨平台逻辑仍位于 `tools/` 下的 Python 脚本中。全部 alias 与参数的
+权威列表就是 `scons help`，常用参数示例：
 
 ```bash
 scons build-book --check
@@ -128,9 +146,17 @@ scons build-book --use-system-fonts
 scons build-book --release
 scons build-book --release --check
 scons init-blender --check-only
+scons init-blender --mirror=official
+scons init-blender --mirror=github
+scons init-blender --mirror=gitee
+scons init-blender --mirror-url=https://git.example.com/blender.git
 scons build-blender --blender-config=Debug -j 12
 scons bump-version --minor
 ```
+
+`--mirror` 与 `--mirror-url` 只属于 `init-blender`，且只在需要克隆时生效：已有检出只会被
+核对与报告，不会被改写来源。SCons 的自定义参数一律写成 `--opt=value`
+（例如 `--src=D:/src/blender`），空格分隔会被当成缺少参数。
 
 发布新版本前，先把改动以无序列表写入 `RELEASE_NOTE.md` 的 `Pending` 段，再运行
 `scons bump-version --major`、`--minor` 或 `--micro` 中恰好一个。命令会同步更新

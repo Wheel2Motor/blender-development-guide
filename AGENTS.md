@@ -10,10 +10,11 @@
 > 不符就非零退出并引导运行 `init-book`。`init-book` 下载到临时目录，校验通过后才原子
 > 安装，不要求人工解压或搬运文件。
 > 要核对源码或重截截图才需要 `scons init-blender`
-> （约 7 GB，很久），随后用 `scons build-blender` 生成工程并编译。
-> `init-blender` 负责源码与官方要求在构建前额外准备的依赖；`build-blender` 自身只核验、
-> 配置和构建，
-> 但不屏蔽 Blender 上游构建脚本原有的依赖懒下载行为。六个 alias 由根目录
+> （约 9 GB，很久；拉不动官方仓库时加 `--mirror=github` 或 `--mirror=gitee`），
+> 随后用 `scons build-blender` 生成工程并编译。
+> `init-blender` 负责源码、主仓库 LFS 与所有平台（含 Windows）的预编译库；
+> `build-blender` 自身只核验、配置和构建：源码 / LFS / `lib/` 任一没准备好就直接失败并
+> 指回 `init-blender`，不依赖上游 `make.bat` 的交互询问。六个 alias 由根目录
 > `SConstruct` 提供 alias 与 `build-book --release` 模式，逻辑仍在 `tools/` 下的对应 `.py` 里。
 
 ## 一、先读这四份
@@ -166,15 +167,32 @@ python qa/check_markdown.py
   初始化脚本和源码引用检查器都读取这份配置。
   **不入版本控制**（重新拉取要很久）。缺了就 `scons init-blender`（或
   `python tools/init_blender.py`）。
-  注意 `lib/` 是 Git LFS 子模块且 `.gitmodules` 里写着 `update = none`。Linux/macOS
-  的官方流程要求在构建前额外准备，例如：
+  注意 `lib/` 是 Git LFS 子模块且 `.gitmodules` 里写着 `update = none`——直接
+  `git submodule update --init -- lib/<平台>_<架构>` 会 **静默什么都不做**，必须就地覆盖
+  更新策略（脚本内部就是这么做的，手工恢复时照抄）：
   ```bash
-  git submodule update --init --progress -- lib/linux_x64
+  git -C blender -c submodule.lib/windows_x64.update=checkout \
+    submodule update --init --progress -- lib/windows_x64
+  git -C blender/lib/windows_x64 -c lfs.concurrenttransfers=32 lfs pull
   ```
-  `init_blender.py` 会在这些平台自动选 `lib/` 子模块（**没有
-  `macos_x64`**）、校验目录非空、自动尝试还原 LFS 指针，并将下载进度
-  实时透传到终端。Windows 上游 `make.bat` 会自行检测和询问下载，
-  `init_blender.py` 不重复实现。
+  `init_blender.py` 会在所有平台自动选 `lib/` 子模块（**没有
+  `macos_x64`**）、校验目录非空、自动还原 LFS 指针，并将下载进度
+  实时透传到终端。Windows 也走这条非交互路径；上游 `make.bat` 的 `set /p`
+  询问只在库仍缺失时才会出现，`init_blender.py` 不依赖它。
+- 源码镜像：`scons init-blender --mirror=github|gitee`（默认 `official`）只换 **主仓库** 的
+  克隆来源，`lib/` 子模块与主仓库的 Git LFS 对象仍来自 `projects.blender.org`，构建方式
+  不变。主仓库的 LFS 内容必须还原成实体：上游 `CMakeLists.txt` 见到指针形态的
+  `release/datafiles/startup.blend` 会直接 FATAL，`init-blender` 因此从官方补齐
+  （`lfs-fallback` 远端 + `git lfs fetch`/`checkout`），`build-blender` 在 configure 前再核一次。
+  **克隆和子模块更新一律跳过 LFS smudge**（逐文件串行 smudge 实测只有几十 KiB/s，镜像
+  更会直接失败），改由随后一次并发的 `git lfs pull` 补齐（`lfs.concurrenttransfers=32`，
+  实测把 `projects.blender.org` 从 0.43 MiB/s 提到 1.6 MiB/s）；`lib/` 子模块同理。
+  还原后必须按 `git lfs ls-files` **全量** 核对，不能只查 `startup.blend`——上游只查那一个
+  文件，半个 LFS 的树能配置通过、产出却缺图标/画笔/ICC 数据。
+  中断的 git 操作会留下 `.git/index.lock`，脚本会告警（不替用户删文件），否则 LFS 文件会
+  一直显示为 modified。
+  镜像可能落后：脚本用 `git ls-remote` 先查基准分支、克隆后再核 `git rev-parse HEAD`，
+  两者不一致就非零退出，不得为了让镜像“能用”而放宽这条核对或跳过基准 commit。
 - 升级基准不能只修改版本字符串。更新 `book/blender-baseline.json` 后，必须重新核对
   源码引用、版本相关结论、命令输出和截图；书中保留的旧版本兼容性示例不要机械替换。
 - 书籍自身版本由 `book/meta.json` 唯一定义，与 Blender 基准版本分开维护；封面小字
@@ -198,7 +216,7 @@ python qa/check_markdown.py
 | `tools/build_book.py` | 默认构建 PDF；`--format=html` 先生成 `book/build/res/*.svg` 与可选网页字体，再编译 HTML 并嵌入 `book/html/style.css`；`--use-system-fonts` 可显式选择系统 fallback；PDF 的 `--check` 再做逐页渲染 + 溢出扫描（入口：`scons build-book`） |
 | `tools/build_book_release.py` | 检查示例、构建 PDF，并生成顶层仅含 PDF 与 `examples/` 的书籍发布目录（入口：`scons build-book --release`） |
 | `tools/blender_baseline.py` | 读取并校验 `book/blender-baseline.json`，供 Blender 初始化与源码引用检查共用 |
-| `tools/init_blender.py` | 拉取/核对 Blender 源码，在官方要求额外前置步骤的平台准备 `lib/` 预编译库，并探测工具链门槛（入口：`scons init-blender`） |
+| `tools/init_blender.py` | 拉取/核对 Blender 源码（`--mirror=official\|github\|gitee` 只换主仓库来源）、还原主仓库 LFS、在所有平台非交互准备 `lib/` 预编译库，并探测工具链门槛（入口：`scons init-blender`） |
 | `tools/build_blender.py` | 只读核验已初始化的源码与依赖，生成 out-of-source CMake 工程并构建；Windows 生成并构建 Visual Studio solution（入口：`scons build-blender`） |
 | `tools/version_mgr.py` | 校验语义版本与发布说明，提升 `book/meta.json` 中的版本，并将 `Pending` 列表原子迁移到最新发布记录（入口：`scons bump-version --major|--minor|--micro`） |
 | `tools/check_overflow.py` | 逐页扫描版心外墨迹（**横向溢出**） |
@@ -208,8 +226,14 @@ python qa/check_markdown.py
 | `qa/check_examples.py` | 校验完整示例脚注、发布文件覆盖与 Python 语法，不生成报告 |
 
 根目录只保留一个 `SConstruct` 跨平台入口，alias 与参数必须同步维护在 `scons help`、
-根 `README.md` 和对应构建文档中。SCons 只负责编排，不应复制 `tools/` 中的业务逻辑。
+根 `README.md` 和对应构建文档中。`scons help` 的参数按 alias 分段（`init-book options:`、
+`build-book options:`、`init-blender options:`、`build-blender options:`、
+`bump-version options:`），新增参数必须放进它所属 alias 的段；同一个开关被多条 alias
+接受时就在相关段里各自注明（`--check-only`、`--use-system-fonts` 是这种写法），
+不要另开非命令名的段。SCons 只负责编排，不应复制 `tools/` 中的业务逻辑。
 `--release` 与 `--use-system-fonts` 必须保持互斥；发布包只能使用项目固定字体。
+`--mirror` 与 `--mirror-url` 只适用于 `init-blender`，只改主仓库的克隆来源，且只在克隆时
+生效；镜像缺少基准分支或提交时必须非零退出，其余 alias 传入应直接拒绝。
 `--format=html` 不能与 `--check` 或 `--release` 组合；HTML 只放行 Typst 已知的实验导出
 警告。新增 `book/figures/<name>.typ` 时必须导出零参数 `fig-<name>()`；章节内直接写
 `figure(canvas(...))` 时必须带唯一 `<fig-...>` 标签，供 HTML 资源构建器发现。
@@ -224,13 +248,16 @@ python qa/check_markdown.py
 中文也不会崩），但 **别因此就把面向用户的文字改回中文**。
 
 **所有入口都只检查工具、不安装工具**：`init_book.py` 报 Typst / Python 与可选依赖，
-`init_blender.py` 报 git / cmake / ninja / 编译器，并按是否需要拉取 `lib/` 给 `git-lfs`
-定级。必需项缺失 → 官方安装命令 + **非零退出码**，可选项缺失 → 只提示。初始化入口
-只下载工程内可重取数据（字体、Blender 源码与平台库）；三个构建入口本身均不下载这些
+`init_blender.py` 报 git / cmake / ninja / 编译器，并按是否需要拉取 `lib/` 或主仓库 LFS
+给 `git-lfs` 定级。必需项缺失 → 官方安装命令 + **非零退出码**，可选项缺失 → 只提示。
+初始化入口只下载工程内可重取数据（字体、Blender 源码、主仓库 LFS 与平台库）；
+**`init-blender` 成功后源码、LFS、`lib/` 都必须已就绪**：所有平台（含 Windows）的
+预编译库都由它非交互准备，`build_blender.py` 只核验、缺库直接失败并指回
+`scons init-blender`，不依赖上游 `make.bat` 的交互询问。两个构建入口均不下载这些
 输入，其中 `build_blender.py` 不主动调用 `update`、Git fetch 或 LFS/submodule 更新。
-Windows 上上游 `make.bat` 自带的依赖检查和懒下载逻辑应保持原样，不由项目包装层
-屏蔽或在 `init-blender` 中重复实现。Linux/macOS 等平台若官方流程明确要求构建前另行
-执行 `make update` 或从旧 SVN/子模块仓库拉依赖，则应由 `init-blender` 完成该前置步骤。
+Windows 上游 `make.bat` 自带的依赖检查和懒下载逻辑保持原样，但正常情况下不会触发；
+Linux/macOS 等平台若官方流程明确要求构建前另行执行 `make update` 或从旧 SVN/子模块
+仓库拉依赖，则应由 `init-blender` 完成该前置步骤。
 Windows 项目构建入口仅允许 MSVC，不得因 PATH 上存在 `clang-cl` 而自动降级；Visual Studio
 必须通过 `vswhere` 从普通终端自动定位，不得要求用户先进入 Developer Command Prompt。
 

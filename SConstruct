@@ -51,29 +51,47 @@ Usage:
 Commands:
   init-book             Check Typst and prepare either project or system fonts.
   build-book            Build the book as PDF (default) or experimental HTML.
-  init-blender          Fetch/check pinned Blender sources and dependencies.
+  init-blender          Fetch/check pinned sources, LFS content and platform libraries.
   build-blender         Configure and build Blender.
   bump-version          Bump the book version and promote Pending release notes.
   help                  Print this command list and the supported options.
 
-Book options:
-  --format=FORMAT       Output format: pdf (default) or html (experimental).
-  --check               Render every page and scan for margin overflow.
-  --release             Build the public PDF plus examples/ release directory.
-  --use-system-fonts    Skip project font download/use installed OS font fallbacks.
-  --check-only          Inspect initialization state without downloading/writing.
-  --force               Re-verify every project font during init-book.
+init-book options:
+  --check-only          Inspect without creating directories or downloading fonts.
+                        Also accepted by init-blender (inspect only, never clones).
+  --force               Ignore the font manifest and re-verify every font file.
+  --use-system-fonts    Skip the project font download; check installed OS fonts.
 
-Blender options:
-  --check-only              Inspect initialization state without cloning/updating.
-  --src=DIR                 Override the Blender source directory.
+build-book options:
+  --format=FORMAT       Output format: pdf (default) or html (experimental).
+  --check               Render every page and scan for margin overflow (slow).
+  --release             Build the public PDF plus examples/ release directory.
+  --use-system-fonts    Preview with installed OS fonts (same switch as init-book).
+
+init-blender options:
+  --check-only          Inspect without cloning or updating (init-book accepts it too).
+  --src=DIR             Source directory to create or inspect (default: ./blender).
+  --mirror=MIRROR       Where a NEW clone comes from (default: official):
+                          official  projects.blender.org, the canonical repository
+                          github    github.com/blender/blender, the official mirror
+                          gitee     gitee.com/mirrors/blender, a third-party mirror
+                        Only the main repository changes hands: lib/ platform
+                        libraries and the repository's Git LFS objects still come
+                        from projects.blender.org. A mirror that lacks the pinned
+                        branch or commit fails fast instead of downloading
+                        everything first. An existing checkout is never rewritten.
+  --mirror-url=URL      Clone URL that overrides --mirror, e.g. a self-hosted
+                        mirror or a company GitLab.
+
+build-blender options:
+  --src=DIR                 Build this source directory (default: ./blender).
   --build-dir=DIR           Override the out-of-source CMake build directory.
   --blender-config=CONFIG   Release or Debug (default: Release).
   --configure-only          Generate the CMake project without compiling.
   --allow-other-revision    Permit a source HEAD different from the pinned baseline.
   -j N, --jobs=N            Forward the explicit parallel job count to Blender.
 
-Version options (choose exactly one with bump-version):
+bump-version options (choose exactly one):
   --major               Bump X.y.z to X+1.0.0.
   --minor               Bump x.Y.z to x.Y+1.0.
   --micro               Bump x.y.Z to x.y.Z+1.
@@ -88,6 +106,10 @@ Examples:
   scons build-book --release
   scons build-book --release --check
   scons init-blender
+  scons init-blender --check-only
+  scons init-blender --mirror=github
+  scons init-blender --mirror=gitee
+  scons init-blender --mirror-url=https://git.example.com/blender.git
   scons build-blender --blender-config=Debug -j 12
   scons bump-version --minor
 """
@@ -107,6 +129,11 @@ AddOption("--force", dest="force_fonts", action="store_true", default=False,
           help="re-verify every project font during init-book")
 AddOption("--src", dest="source_dir", type="string", default=None,
           help="override the Blender source directory")
+AddOption("--mirror", dest="blender_mirror", type="choice",
+          choices=("official", "github", "gitee"), default="official",
+          help="source mirror for a new Blender clone: official, github, or gitee")
+AddOption("--mirror-url", dest="blender_mirror_url", type="string", default=None,
+          help="override the mirror clone URL, e.g. a self-hosted mirror")
 AddOption("--build-dir", dest="blender_build_dir", type="string", default=None,
           help="override the Blender CMake build directory")
 AddOption("--blender-config", dest="blender_config", type="choice",
@@ -156,6 +183,9 @@ def _script_args(alias: str) -> list[str]:
             args.append("--check-only")
         if GetOption("source_dir"):
             args.extend(("--src", GetOption("source_dir")))
+        args.extend(("--mirror", GetOption("blender_mirror")))
+        if GetOption("blender_mirror_url"):
+            args.extend(("--mirror-url", GetOption("blender_mirror_url")))
     elif alias == "build-blender":
         if GetOption("source_dir"):
             args.extend(("--src", GetOption("source_dir")))
@@ -202,6 +232,9 @@ def _run_script(target, source, env) -> int:  # noqa: ANN001
         return 2
     if alias != "bump-version" and version_flags:
         print("[FAIL] --major, --minor, and --micro only apply to bump-version.")
+        return 2
+    if alias != "init-blender" and _option_was_explicit("--mirror", "--mirror-url"):
+        print("[FAIL] --mirror and --mirror-url only apply to init-blender.")
         return 2
     release = alias == "build-book" and GetOption("book_release")
     book_format = GetOption("book_format")

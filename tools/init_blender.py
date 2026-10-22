@@ -5,8 +5,9 @@
 做四件事：
 
 1. 把 Blender 源码克隆到基准 commit（``blender/`` 不存在时）；
-2. 仅在上游要求“构建前额外准备”时取对应平台的预编译库子模块；
-   Windows 的 ``make.bat`` 会自行检测并询问下载，因此初始化脚本不重复实现；
+2. 取主仓库的 Git LFS 内容，并按平台准备预编译库 ``lib/<平台>_<架构>``：
+   Windows 也在这里非交互完成（上游 ``make.bat`` 的 ``check_libraries.cmd`` 用
+   ``set /p`` 询问，自动化会话里会失败；库已就绪时它不会再问）；
 3. 探测开发工具链并打印版本，与书里第 2 章的门槛对照给出 PASS / FAIL；
 4. 打印调用 ``scons build-blender`` 的下一步命令
    （**不真的构建**）。
@@ -23,9 +24,19 @@
 
 用法::
 
-    python tools/init_blender.py                # 缺了就克隆，然后检查
-    python tools/init_blender.py --check-only   # 只检查，不克隆不下库（缺必需项则非零退出）
-    python tools/init_blender.py --src DIR      # 指定源码目录（默认 ./blender）
+    python tools/init_blender.py                   # 缺了就克隆，然后检查
+    python tools/init_blender.py --check-only      # 只检查，不克隆不下库（缺必需项则非零退出）
+    python tools/init_blender.py --src DIR         # 指定源码目录（默认 ./blender）
+    python tools/init_blender.py --mirror github   # 从 GitHub 官方镜像克隆
+    python tools/init_blender.py --mirror gitee    # 从 Gitee 镜像克隆（第三方同步）
+    python tools/init_blender.py --mirror-url URL  # 用任意镜像地址（自建、公司内网）
+
+``--mirror`` 只改主仓库的克隆来源：``lib/`` 平台库和主仓库的 Git LFS 对象仍由
+projects.blender.org 提供（镜像里的 ``.gitmodules``、``.gitattributes`` 与官方逐字
+相同），所以构建方式与官方仓库一致，差别只在“数据从哪台机器下载”。主仓库的 LFS
+内容必须还原成实体文件——上游 ``CMakeLists.txt`` 见到指针形态的
+``release/datafiles/startup.blend`` 会直接 FATAL——镜像克隆因此会从官方补取
+（见 ``ensure_repo_lfs()``）。
 
 设计原则：**只增不删、不擅自改用户工作区**。已经存在的源码目录只会被核对与告警，
 不会被 checkout / reset。
@@ -49,7 +60,37 @@ import time
 
 from blender_baseline import BLENDER_BRANCH, BLENDER_COMMIT, BLENDER_VERSION
 
-BLENDER_REPO = "https://projects.blender.org/blender/blender.git"
+# 主仓库来源。--mirror 只切换这一处，**不切换 lib/ 子模块和 LFS 对象**：
+# 镜像里的 .gitmodules / .gitattributes 与官方逐字相同，平台库和 LFS 数据文件仍由
+# projects.blender.org 提供（见本文件 report_mirror_followup()）。
+MIRRORS = {
+    # 官方主仓库（Gitea），开发与发布都在这里。
+    "official": "https://projects.blender.org/blender/blender.git",
+    # 官方文档明确承认的官方镜像：
+    # https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/#github-mirror
+    # 它不含本仓库的 Git LFS 对象，所以克隆时必须跳过 smudge（见 ensure_source）。
+    "github": "https://github.com/blender/blender.git",
+    # 第三方镜像（Gitee 上并没有 Blender 官方镜像）。mirrors/blender 由 Gitee 的 mirrors
+    # 组织同步，核对时带有 blender-v5.2-release 与 v5.2.2；但它终究是别人同步的，
+    # 所以 ensure_source 会在克隆前后都核对基准分支与 commit，落后就明确失败。
+    # 另一个已知镜像 blender_5/blender 停在 blender-v5.0-release，不能用于本基准。
+    "gitee": "https://gitee.com/mirrors/blender.git",
+}
+DEFAULT_MIRROR = "official"
+# 官方仓库(也是镜像落后时补取基准 commit、补取 LFS 数据的来源)。
+BLENDER_REPO = MIRRORS["official"]
+# git-lfs 默认只开 8 个并发连接。实测 projects.blender.org 在这条网络上：
+# 8 -> 0.43 MiB/s，32 -> 1.60 MiB/s，64 -> 2.00 MiB/s（再高收益递减）。
+# 32 是速度与对服务器压力的折中；`-c` 会经 GIT_CONFIG_PARAMETERS 传给 git-lfs
+# 子进程（用 `git lfs env` 验证过 ConcurrentTransfers 生效）。
+LFS_CONCURRENCY = 32
+
+
+def lfs_cmd(src: str, *args: str) -> list[str]:
+    """Git LFS 命令，统一带上并发设置。"""
+    return ["git", "-C", src,
+            "-c", "lfs.concurrenttransfers=%d" % LFS_CONCURRENCY,
+            "lfs", *args]
 # 全书带 `文件:行号` 的源码引用都钉在上面的 commit 上；换版本可能对不上。
 # 当前引用数量由 qa/check_source_refs.py 在运行时统计，不在仓库里保存快照。
 
@@ -60,13 +101,9 @@ CLANG_MIN = "17.0"          # 同上
 MSVC_TOOLSET_MIN = "19.44.35216"  # build_files/cmake/platform/platform_win32.cmake:42
 
 # 由 ensure_libs() 设置的"当前状态"，供 check_tools() 判断 git-lfs 是必需还是用不到：
-#   * LFS_NEEDED 非 None -> 需要拉取/还原 lib/，此时缺 git-lfs 就是 [FAIL]；
-#   * UPSTREAM_LIB_HANDLING -> 是否把平台库交给 Blender 上游构建脚本管理；
-#   * 两者均未设 -> lib/ 已是还原好的实体文件，缺 git-lfs 只 [WARN]。
+#   * LFS_NEEDED 非 None -> 需要拉取/还原 lib/ 或主仓库 LFS 内容，缺 git-lfs 就是 [FAIL]；
+#   * 未设 -> 两者都已是还原好的实体文件，缺 git-lfs 只 [WARN]。
 LFS_NEEDED: str | None = None
-# Windows make.bat 自己管理平台库；用独立状态避免把"委托上游"误报为
-# "lib/ 已经还原"。
-UPSTREAM_LIB_HANDLING = False
 # 由 check_tools() 设置：ninja 是否在位（初始化报告仍会说明推荐后端是否可用）。
 NINJA_PRESENT = False
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -115,13 +152,17 @@ def command_text(cmd: list[str]) -> str:
 
 
 def run_live(cmd: list[str], description: str,
-             cwd: str | None = None) -> subprocess.CompletedProcess:
+             cwd: str | None = None,
+             env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """Run a long command with its output attached to the current terminal.
 
     Clone, fetch, submodule, and Git LFS operations must not use ``run()``:
     captured output makes a large download look frozen. Git writes its progress
     meter to stderr, so inheriting both standard streams also preserves the
     interactive progress display in the BAT/SH terminal.
+
+    ``env`` replaces the child environment when given (used to pass
+    ``GIT_LFS_SKIP_SMUDGE`` to a mirror clone); ``None`` inherits ours.
     """
     say(INFO, "%s ..." % description)
     say(INFO, "Command: %s" % command_text(cmd))
@@ -129,7 +170,7 @@ def run_live(cmd: list[str], description: str,
     sys.stderr.flush()
     started = time.monotonic()
     try:
-        cp = subprocess.run(cmd, cwd=cwd)
+        cp = subprocess.run(cmd, cwd=cwd, env=env)
     except KeyboardInterrupt:
         elapsed = time.monotonic() - started
         say(BAD, "%s interrupted after %.1f s." % (description, elapsed))
@@ -268,13 +309,182 @@ def lfs_pointer_files(path: str, limit: int = 400) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# 0) 镜像选择
+# ---------------------------------------------------------------------------
+def mirror_url(mirror: str, override: str | None) -> str:
+    """把 ``--mirror`` 与 ``--mirror-url`` 解析成一个克隆 URL。
+
+    ``--mirror-url`` 优先：Gitee 上没有任何官方镜像，用户自己的镜像（或公司内网
+    GitLab）比预设名更实用，所以保留这个逃生口。
+    """
+    return override or MIRRORS[mirror]
+
+
+def mirror_display_name(mirror: str, override: str | None) -> str:
+    """报告里显示的镜像名：给了 URL 就叫 custom，避免把预设名安到别的地址上。"""
+    if override:
+        return "custom"
+    return mirror
+
+
+def report_mirror_followup(src: str, official: bool) -> None:
+    """镜像克隆成功后的补充说明（LFS 已由 ensure_repo_lfs 处理好）。
+
+    **不是失败**：镜像不托管主仓库的 Git LFS 对象，所以内容是在
+    ``ensure_repo_lfs()`` 里从官方服务器补下来的。这里只说明来源，
+    免得用户以为克隆混进了别的东西。
+    """
+    if official:
+        return
+    say(INFO, "Reminder: this checkout came from a mirror.")
+    say(INFO, "The repository's Git LFS objects were fetched from")
+    say(INFO, "projects.blender.org (remote 'lfs-fallback'), because mirrors do not")
+    say(INFO, "host them. Upstream make_update.py does the same for third-party")
+    say(INFO, "checkouts (lfs_fallback_setup); nothing else in the tree is mixed.")
+
+
+def lfs_pointer(path: str, threshold: int = 1024) -> bool:
+    """小文件且首行是 LFS 指针 -> 内容没下载。"""
+    try:
+        if os.path.getsize(path) >= threshold:
+            return False
+        with open(path, "rb") as f:
+            return f.read(64).startswith(b"version https://git-lfs")
+    except OSError:
+        return False
+
+
+def repo_lfs_pointers(src: str) -> list[str] | None:
+    """列出主仓库里仍是 LFS 指针文件的路径（全量，不是抽样）。
+
+    只查 ``startup.blend`` 会让"半成品"蒙混过关：`git lfs pull` 被中断时它可能
+    已经落地，而 ICC 配置、图标、画笔等几千个文件还是指针——上游 CMake 只看
+    ``startup.blend``，所以那种树会配置通过、产出却是坏的。
+
+    返回 ``None`` 表示 `git lfs ls-files` 不可用（没装 git-lfs），调用方退回
+    上游那条单文件检查。
+    """
+    cp = git(src, "lfs", "ls-files", "--name-only")
+    if cp.returncode != 0:
+        return None
+    hits: list[str] = []
+    for rel in text_of(cp).splitlines():
+        rel = rel.strip()
+        if rel and lfs_pointer(os.path.join(src, rel)):
+            hits.append(rel)
+    return hits
+
+
+def ensure_repo_lfs(src: str, official: bool) -> bool:
+    """把主仓库被 LFS 管理的文件补成实体内容。
+
+    这不是可选步骤：上游 ``CMakeLists.txt`` 在 configure 阶段就检查
+    ``release/datafiles/startup.blend`` 的大小，指针文件会直接 FATAL
+    （"Detected incomplete startup blend"）；``assets/*.blend``、画笔、ICC
+    配置等也会被打包进产物。
+
+    官方仓库克隆时由 git-lfs 的 smudge 自动完成；镜像克隆为了不让 checkout
+    失败用了 ``GIT_LFS_SKIP_SMUDGE=1``，因此必须在这里从官方补取——
+    等价于上游 ``make_update.py`` 的 ``lfs_fallback_setup()``。
+    """
+    sentinel = os.path.join(src, "release", "datafiles", "startup.blend")
+    lock = os.path.join(src, ".git", "index.lock")
+    if os.path.exists(lock):
+        # 上一次中断的 git/lfs 操作留下的锁：git 之后既不能刷新索引也改不了它，
+        # 结果 LFS 文件全部显示为 modified（内容其实是对的）。不替用户删文件。
+        say(WARN, "Found a stale %s." % os.path.relpath(lock, src))
+        say(INFO, "An interrupted git/git-lfs run left it behind; git cannot refresh")
+        say(INFO, "the index until it is gone, so LFS files keep showing as modified.")
+        say(INFO, "Make sure no git process is running, delete that file, then re-run.")
+    pointers = repo_lfs_pointers(src)
+    if pointers is None:
+        # 没有 git-lfs：只能按上游的判据检查那一个文件。
+        pointers = [os.path.relpath(sentinel, src)] if lfs_pointer(sentinel) else []
+    if not pointers:
+        return True
+
+    print()
+    say(WARN, "Git LFS content is missing: %d file(s) are still pointer files."
+        % len(pointers))
+    for rel in pointers[:5]:
+        say(INFO, "  %s" % rel)
+    if len(pointers) > 5:
+        say(INFO, "  ... and %d more" % (len(pointers) - 5))
+    say(INFO, "The build needs all of it: upstream CMakeLists.txt refuses to configure")
+    say(INFO, "while release/datafiles/startup.blend is a pointer file, and the rest")
+    say(INFO, "(icons, brushes, color management data) ships inside Blender.")
+
+    if not tool_path("git-lfs"):
+        say(BAD, "git-lfs not found on PATH, so the LFS content cannot be fetched.")
+        install_hint("git-lfs", [
+            "Windows : winget install --id GitHub.GitLFS",
+            "macOS   : brew install git-lfs   (then: git lfs install)",
+            "Linux   : sudo apt install git-lfs   (then: git lfs install)",
+            "any OS  : https://git-lfs.com/",
+        ])
+        return False
+
+    if official:
+        cp = run_live(lfs_cmd(src, "pull"),
+                      "Restore Git LFS files from the official repository")
+    else:
+        have = git(src, "remote", "get-url", "lfs-fallback")
+        if have.returncode != 0:
+            cp = run_live(["git", "-C", src, "remote", "add",
+                           "lfs-fallback", BLENDER_REPO],
+                          "Add the official repository as LFS fallback")
+            if cp.returncode != 0:
+                return False
+        git(src, "config", "lfs.remote.searchall", "true")
+        cp = run_live(lfs_cmd(src, "fetch", "lfs-fallback"),
+                      "Fetch Git LFS objects from the official repository")
+        if cp.returncode != 0:
+            say(INFO, "Git printed the LFS error above. Without these files the")
+            say(INFO, "Blender build cannot configure, so this counts as a failure.")
+            return False
+        cp = run_live(lfs_cmd(src, "checkout"),
+                      "Materialize Git LFS files in the working tree")
+
+    if cp.returncode != 0:
+        say(BAD, "Git LFS restore failed (exit code %d)." % cp.returncode)
+        return False
+    remaining = repo_lfs_pointers(src)
+    if remaining is None:
+        remaining = [os.path.relpath(sentinel, src)] if lfs_pointer(sentinel) else []
+    if remaining:
+        say(BAD, "%d file(s) are still pointer files after the LFS restore."
+            % len(remaining))
+        for rel in remaining[:5]:
+            say(INFO, "  %s" % rel)
+        say(INFO, "Check network access to %s and re-run this script." % BLENDER_REPO)
+        return False
+    say(OK, "Git LFS content is materialized (no pointer files left in the checkout).")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # 1) 克隆 / 核对源码
 # ---------------------------------------------------------------------------
-def ensure_source(src: str, check_only: bool) -> bool:
+def ensure_source(src: str, check_only: bool, mirror: str, repo_url: str) -> bool:
     """克隆/核对源码。返回"是否可用"（缺失、克隆失败、无法核对 -> False）。"""
     print()
     print("== 1. Blender source ==")
+    official = repo_url == BLENDER_REPO
+    say(INFO, "Mirror   : %s (%s)" % (mirror, repo_url))
+    if not official:
+        say(INFO, "Only the main repository comes from this mirror. The lib/ platform")
+        say(INFO, "libraries and this repository's Git LFS objects are still served by")
+        say(INFO, "projects.blender.org: .gitmodules and .gitattributes are identical in")
+        say(INFO, "every mirror, so the build procedure does not change.")
     if os.path.isdir(os.path.join(src, ".git")):
+        cp = git(src, "remote", "get-url", "origin")
+        origin = first_line(text_of(cp)) if cp.returncode == 0 else ""
+        if origin and origin == repo_url:
+            say(OK, "Existing checkout already tracks %s." % origin)
+        elif origin and not official:
+            say(INFO, "Existing checkout tracks %s." % origin)
+            say(INFO, "--mirror selects where a NEW clone comes from; this working")
+            say(INFO, "tree is left untouched, so nothing was re-downloaded.")
         head = head_commit(src)
         if head is None:
             if not tool_path("git"):
@@ -301,6 +511,9 @@ def ensure_source(src: str, check_only: bool) -> bool:
             say(INFO, "  git -C \"%s\" fetch --progress --depth 1 origin %s"
                 % (src, BLENDER_COMMIT))
             say(INFO, "  git -C \"%s\" checkout %s" % (src, BLENDER_COMMIT))
+        if not ensure_repo_lfs(src, official):
+            return False
+        report_mirror_followup(src, official)
         return True
 
     if os.path.isdir(src):
@@ -319,11 +532,41 @@ def ensure_source(src: str, check_only: bool) -> bool:
         say(INFO, "commands for your platform. This script never installs it for you.")
         return False
 
+    # 先问一次远端有没有基准分支。镜像是别人同步的，可能落后好几个月；
+    # 先花几秒问一句，好过下完 7 GB 才发现分支根本不存在。
+    # `--exit-code` 在“没有任何匹配的 ref”时返回 2，网络/DNS 故障返回 128。
+    probe = run(["git", "ls-remote", "--exit-code", "--heads", repo_url, BLENDER_BRANCH])
+    if probe.returncode == 2:
+        say(BAD, "Mirror %s has no branch %s." % (mirror, BLENDER_BRANCH))
+        say(INFO, "It is behind the official repository, so it cannot provide the pinned")
+        say(INFO, "baseline commit %s. Nothing was downloaded." % BLENDER_COMMIT)
+        say(INFO, "Clone from the official repository instead:")
+        say(INFO, "  scons init-blender --mirror official")
+        say(INFO, "or point --mirror-url at a mirror that tracks %s." % BLENDER_BRANCH)
+        return False
+    if probe.returncode != 0:
+        say(WARN, "Could not check whether %s has branch %s (git ls-remote failed)."
+            % (mirror, BLENDER_BRANCH))
+        say(INFO, "Continuing: if the mirror is unreachable from this network, the clone")
+        say(INFO, "below prints the real error, and --mirror official is the fallback.")
+    else:
+        say(OK, "Mirror %s provides branch %s." % (mirror, BLENDER_BRANCH))
+
+    # 所有镜像（含官方）都跳过 clone 时的 LFS smudge，理由有两条：
+    #   1. 镜像根本不托管这些对象，smudge 会让 clone 直接失败；
+    #   2. 官方仓库的 smudge 是逐文件串行的，实测只有几十 KiB/s；跳过之后由
+    #      ensure_repo_lfs() 用并发的 `git lfs fetch/pull` 一次性补齐，快得多。
+    # 这样三条镜像的取源路径完全一致，只差 URL。
+    env = dict(os.environ, GIT_LFS_SKIP_SMUDGE="1")
+    say(INFO, "Cloning with GIT_LFS_SKIP_SMUDGE=1; Git LFS content is fetched")
+    say(INFO, "afterwards in one concurrent pass (see section 1).")
+
     say(INFO, "The source repository is large. Git will print transfer progress below.")
     cp = run_live(
         ["git", "clone", "--progress", "--branch", BLENDER_BRANCH,
-         BLENDER_REPO, src],
-        "Clone Blender source (branch %s)" % BLENDER_BRANCH,
+         repo_url, src],
+        "Clone Blender source (branch %s from %s)" % (BLENDER_BRANCH, mirror),
+        env=env,
     )
     if cp.returncode != 0:
         say(INFO, "Git printed the error above. A partial directory may remain at %s." % src)
@@ -334,30 +577,52 @@ def ensure_source(src: str, check_only: bool) -> bool:
     head = head_commit(src)
     if head == BLENDER_COMMIT:
         say(OK, "Cloned and already at the baseline commit %s." % BLENDER_COMMIT)
+        if not ensure_repo_lfs(src, official):
+            return False
+        report_mirror_followup(src, official)
         return True
 
-    say(INFO, "Branch tip is %s; fetching baseline commit %s ..."
-        % ((head or "?")[:12], BLENDER_COMMIT[:12]))
-    cp = run_live(
-        ["git", "-C", src, "fetch", "--progress", "--depth", "1",
-         "origin", BLENDER_COMMIT],
-        "Fetch baseline commit %s" % BLENDER_COMMIT[:12],
-    )
-    if cp.returncode != 0:
-        say(INFO, "The clone succeeded, but the baseline commit could not be fetched.")
-        say(INFO, "The checkout was left untouched so you can inspect or retry it safely.")
-        return False
+    say(INFO, "Branch tip is %s." % (head or "?")[:12])
+    # 克隆拉的是整条分支历史，基准 commit 一般已经在本地。此时不要再按 SHA 向远端
+    # 取一次：并非每个镜像都允许 `fetch <sha>`，而本地已有对象就没必要联网。
+    present = git(src, "cat-file", "-e", BLENDER_COMMIT + "^{commit}").returncode == 0
+    if present:
+        say(OK, "Baseline commit %s is already in the clone." % BLENDER_COMMIT[:12])
+    else:
+        say(INFO, "Fetching baseline commit %s ..." % BLENDER_COMMIT[:12])
+        cp = run_live(
+            ["git", "-C", src, "fetch", "--progress", "--depth", "1",
+             "origin", BLENDER_COMMIT],
+            "Fetch baseline commit %s" % BLENDER_COMMIT[:12],
+        )
+        if cp.returncode != 0:
+            say(INFO, "The clone succeeded, but the baseline commit could not be fetched.")
+            if not official:
+                say(INFO, "Mirror %s is behind: it does not carry %s."
+                    % (mirror, BLENDER_COMMIT))
+                say(INFO, "Fetch just this one commit from the official repository:")
+                say(INFO, "  git -C \"%s\" remote add official %s" % (src, BLENDER_REPO))
+                say(INFO, "  git -C \"%s\" fetch --depth 1 official %s"
+                    % (src, BLENDER_COMMIT))
+                say(INFO, "  git -C \"%s\" checkout %s" % (src, BLENDER_COMMIT))
+                say(INFO, "Next time, --mirror official clones straight from upstream.")
+            say(INFO, "The checkout was left untouched so you can inspect or retry it safely.")
+            return False
 
     cp = run_live(
         ["git", "-C", src, "checkout", "--progress", BLENDER_COMMIT],
         "Check out baseline commit %s" % BLENDER_COMMIT[:12],
     )
     if cp.returncode != 0:
-        say(INFO, "The fetch succeeded, but checkout failed; Git printed the reason above.")
+        say(INFO, "The baseline commit is present, but checkout failed; Git printed the")
+        say(INFO, "reason above. Run 'git -C \"%s\" status' to see local changes." % src)
         return False
     head = head_commit(src)
     if head == BLENDER_COMMIT:
         say(OK, "Checked out the baseline commit %s." % BLENDER_COMMIT)
+        if not ensure_repo_lfs(src, official):
+            return False
+        report_mirror_followup(src, official)
         return True
     say(BAD, "Could not check out the baseline commit (HEAD=%s)." % (head or "?"))
     say(INFO, "Upstream may have rolled the branch; fetch the commit manually:")
@@ -374,7 +639,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
     副作用：需要拉取/还原 ``lib/`` 时把模块级 ``LFS_NEEDED`` 设成原因字符串，
     这样 ``check_tools()`` 才知道缺 git-lfs 到底是 [FAIL] 还是当前用不到。
     """
-    global LFS_NEEDED, UPSTREAM_LIB_HANDLING
+    global LFS_NEEDED
     print()
     print("== 2. Precompiled libraries (lib/ submodule) ==")
     system, machine = platform.system(), platform.machine()
@@ -388,12 +653,12 @@ def ensure_libs(src: str, check_only: bool) -> bool:
     say(INFO, "Platform: %s / %s" % (system, machine))
 
     if system == "Windows":
-        UPSTREAM_LIB_HANDLING = True
-        say(OK, "Dependency preparation is delegated to Blender's upstream make.bat.")
-        say(INFO, "If the platform libraries are missing, make.bat will detect them and")
-        say(INFO, "offer its native download flow during project generation/build.")
-        say(INFO, "init-blender does not duplicate that upstream behavior.")
-        return True
+        # 上游 make.bat 的 check_libraries.cmd 用 `set /p` 交互询问要不要下载平台库。
+        # 在非交互会话（CI、自动化、从脚本调用）里那一步会直接失败，所以这里用
+        # 同一套 git 命令把库准备好：make.bat 之后只因“库已存在”而跳过询问。
+        say(INFO, "Windows platform libraries are prepared here, without make.bat's")
+        say(INFO, "interactive prompt (its own prompt stays as a fallback if libraries")
+        say(INFO, "are still missing).")
 
     if not cands:
         say(WARN, "Upstream ships no precompiled libs for %s/%s (there is no macos_x64)."
@@ -432,7 +697,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
                 return False
             say(INFO, "Normal mode will now restore the missing Git LFS content.")
             cp = run_live(
-                ["git", "-C", lib_path, "lfs", "pull"],
+                lfs_cmd(lib_path, "pull"),
                 "Restore Git LFS files for lib/%s" % name,
             )
             if cp.returncode != 0:
@@ -453,8 +718,8 @@ def ensure_libs(src: str, check_only: bool) -> bool:
 
     if check_only:
         say(BAD, "lib/%s is missing or empty (--check-only does not download it)." % name)
-        say(INFO, "Run: git -C \"%s\" submodule update --init --progress -- lib/%s"
-            % (src, name))
+        say(INFO, "Run 'scons init-blender' (without --check-only) to fetch it;")
+        say(INFO, "the submodule is pinned to a Git LFS repository, so git-lfs is required.")
         return False
 
     if not tool_path("git"):
@@ -471,14 +736,29 @@ def ensure_libs(src: str, check_only: bool) -> bool:
         say(INFO, "installs tools for you.")
         return False
 
+    # .gitmodules 写着 `update = none`（上游故意的），必须就地改成 checkout，
+    # 否则 `git submodule update` 会跳过它——make.bat 的 check_libraries.cmd
+    # 也是先 `git config --local submodule.<path>.update checkout` 再更新。
+    # 同时跳过 smudge：lib 仓库是 LFS，逐文件串行 smudge 实测只有几十 KiB/s，
+    # 换成下面一次并发的 `git lfs pull`。
     cp = run_live(
-        ["git", "-C", src, "submodule", "update", "--init", "--progress",
-         "--", "lib/" + name],
-        "Fetch submodule lib/%s (Git LFS; large)" % name,
+        ["git", "-C", src, "-c", "submodule.lib/%s.update=checkout" % name,
+         "submodule", "update", "--init", "--progress", "--", "lib/" + name],
+        "Fetch submodule lib/%s (Git checkout only)" % name,
+        env=dict(os.environ, GIT_LFS_SKIP_SMUDGE="1"),
     )
     if cp.returncode != 0:
-        say(INFO, "Git printed the submodule or Git LFS error above.")
+        say(INFO, "Git printed the submodule error above.")
         return False
+
+    if tool_path("git-lfs"):
+        cp = run_live(
+            lfs_cmd(lib_path, "pull"),
+            "Fetch Git LFS content for lib/%s" % name,
+        )
+        if cp.returncode != 0:
+            say(INFO, "Git printed the Git LFS error above.")
+            return False
 
     if dir_has_content(lib_path):
         say(OK, "lib/%s fetched and is not empty." % name)
@@ -489,7 +769,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
             for p in ptrs:
                 say(INFO, "  %s" % p)
             cp = run_live(
-                ["git", "-C", lib_path, "lfs", "pull"],
+                lfs_cmd(lib_path, "pull"),
                 "Restore Git LFS files for lib/%s" % name,
             )
             if cp.returncode != 0:
@@ -643,16 +923,14 @@ def check_tools() -> bool:
         ])
         required_ok = False
 
-    # git-lfs：**需要拉取/还原 lib/ 时是必需项**（lib/ 是 Git LFS 子模块，没有它
-    # 只会拿到指针文件，构建必然缺库）；lib/ 已经是还原好的实体文件时用不到它。
+    # git-lfs：**需要拉取/还原 lib/ 或主仓库 LFS 时是必需项**（两者都是 Git LFS
+    # 仓库，没有它只会拿到指针文件）；两者都已还原成实体文件时用不到它。
     lfs_exe = tool_path("git-lfs")
     if lfs_exe:
         if LFS_NEEDED:
-            lfs_reason = "required to fetch/restore lib/"
-        elif UPSTREAM_LIB_HANDLING:
-            lfs_reason = "available for Blender's upstream dependency flow"
+            lfs_reason = "required to fetch/restore lib/ and repository LFS content"
         else:
-            lfs_reason = "not needed right now: lib/ is already materialized"
+            lfs_reason = "not needed right now: lib/ and LFS content are materialized"
         say(OK, "git-lfs  : %s  (%s)" % (
             probe_version(["git-lfs", "version"]) or "?",
             lfs_reason))
@@ -667,21 +945,8 @@ def check_tools() -> bool:
             "any OS  : https://git-lfs.com/",
         ])
         required_ok = False
-    elif UPSTREAM_LIB_HANDLING:
-        say(WARN, "git-lfs  : NOT FOUND (Blender's upstream dependency flow may need it).")
-        say(INFO, "           init-blender leaves that dependency handling to make.bat.")
-        install_hint("git-lfs", [
-            "Windows : winget install --id GitHub.GitLFS",
-            "any OS  : https://git-lfs.com/",
-        ])
     else:
-        say(WARN, "git-lfs  : NOT FOUND (not needed right now -- lib/ is already materialized).")
-        install_hint("git-lfs", [
-            "Windows : winget install --id GitHub.GitLFS",
-            "macOS   : brew install git-lfs   (then: git lfs install)",
-            "Linux   : sudo apt install git-lfs   (then: git lfs install)",
-            "any OS  : https://git-lfs.com/",
-        ])
+        say(WARN, "git-lfs  : NOT FOUND (not needed right now: lib/ and LFS are materialized).")
 
     # cmake（必需，>= 3.21）
     cm = probe_version(["cmake", "--version"]) if tool_path("cmake") else None
@@ -822,6 +1087,7 @@ def next_steps(src: str) -> None:
     if platform.system() == "Windows":
         say(INFO, "cd /d \"%s\"  &&  scons build-blender%s" % (ROOT, source_arg))
         say(INFO, "Blender's upstream dependency handling remains active in make.bat.")
+        say(INFO, "Platform libraries are already prepared, so make.bat will not prompt.")
     else:
         say(INFO, "cd \"%s\"  &&  scons build-blender%s" % (ROOT, source_arg))
         say(INFO, "Required pre-build platform libraries were checked by init-blender.")
@@ -835,9 +1101,16 @@ def main() -> int:
                          "(exits non-zero if something required is missing)")
     ap.add_argument("--src", default=os.path.join(ROOT, "blender"),
                     help="source directory (default: ./blender)")
+    ap.add_argument("--mirror", choices=sorted(MIRRORS), default=DEFAULT_MIRROR,
+                    help="where a new clone comes from: official (default), github "
+                         "(official mirror) or gitee (third-party mirror)")
+    ap.add_argument("--mirror-url",
+                    help="override the mirror clone URL, e.g. a self-hosted mirror")
     args = ap.parse_args()
 
     src = os.path.abspath(args.src)
+    repo_url = mirror_url(args.mirror, args.mirror_url)
+    mirror_name = mirror_display_name(args.mirror, args.mirror_url)
     print("=" * 70)
     print("Blender source + dev environment check")
     print("Project root : %s" % ROOT)
@@ -845,10 +1118,11 @@ def main() -> int:
     print("Baseline     : Blender %s, %s (%s)" % (
         BLENDER_VERSION, BLENDER_BRANCH, BLENDER_COMMIT
     ))
+    print("Mirror       : %s (%s)" % (mirror_name, repo_url))
     print("Mode         : %s" % ("check-only" if args.check_only else "init"))
     print("=" * 70)
 
-    ok_src = ensure_source(src, args.check_only)
+    ok_src = ensure_source(src, args.check_only, mirror_name, repo_url)
     ok_libs = ensure_libs(src, args.check_only)
     ok_tools = check_tools()
 

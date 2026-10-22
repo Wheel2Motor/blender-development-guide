@@ -47,14 +47,19 @@ scons init-blender
 SCons alias 调用 `tools/init_blender.py`，负责：
 
 - 在 `blender/` 缺失时克隆固定分支并检出基准 commit；
-- 在 Linux/macOS 上初始化官方要求于构建前额外准备的 Git LFS 预编译库子模块；
-- 在 Windows 上不重复拉取平台库，保留 Blender 上游 `make.bat` 的自动检测和懒下载；
+- 允许用 `--mirror` 换主仓库的克隆来源（默认官方），并在克隆前后核验基准分支与提交；
+- 把主仓库的 Git LFS 内容（`release/datafiles/startup.blend`、`assets/*.blend` 等）还原成
+  实体文件，镜像克隆时从官方补齐；
+- 在所有平台准备 `lib/<平台>_<架构>` 预编译库；Windows 也走这条非交互路径（等价于
+  `make.bat` 询问时回答 y，自动化会话没有 stdin 也照样成功），`make.bat` 的询问只在库
+  仍缺失时才会出现；
 - 检查 Git、Git LFS、CMake、Ninja 和编译器；
 - 打印调用 `scons build-blender` 的下一步命令。
 
-源码克隆、基准提交获取，以及需要额外执行的子模块初始化和 Git LFS 下载由这一份
-跨平台 Python 逻辑统一执行。Windows 平台库属于上游构建脚本能自行处理的情况，
-项目初始化层不介入。上述长操作会
+源码克隆、基准提交获取、主仓库 LFS 还原，以及所有平台（含 Windows）的预编译库都由
+这一份跨平台 Python 逻辑统一执行，所以 `scons init-blender` 成功后
+`lib/`、LFS、基准 commit 三者都已就绪，`build-blender` 不再需要任何询问。
+上述长操作会
 直接把 Git 输出透传到当前终端，并强制显示传输进度；每一步开始时会打印实际命令，
 结束时会打印成功或失败、退出码与耗时。因此终端长时间没有回到提示符并不再意味着
 “无反馈下载”。若克隆失败，脚本会保留不完整目录供排查，不会擅自删除。
@@ -71,10 +76,69 @@ scons init-blender --check-only
 
 ```bash
 python tools/init_blender.py --src "D:/src/blender"
+scons init-blender --src=D:/src/blender
 python qa/check_source_refs.py --source "D:/src/blender"
 ```
 
+SCons 的自定义参数必须写成 `--opt=value`，空格分隔会被 SCons 当成缺少参数。
+
 若已有目录的 HEAD 与基准不同，脚本只给出警告，不会覆盖工作树或强制切换版本。
+
+### 源码镜像
+
+官方仓库是 `https://projects.blender.org/blender/blender.git`。网络受限时可以换用镜像。
+完整参数以 `scons help` 的 `init-blender options` 一节为准：
+
+```bash
+scons init-blender --mirror=official  # 默认：官方主仓库
+scons init-blender --mirror=github    # GitHub 官方镜像
+scons init-blender --mirror=gitee     # Gitee 第三方镜像（mirrors 组织同步）
+scons init-blender --mirror-url="https://git.example.com/blender.git"
+```
+
+`--mirror` 默认为 `official`，只影响 **主仓库** 的克隆来源，`--check-only`、`--src` 照旧可用；
+只在需要克隆时生效，已有检出不会被改写来源。
+
+- `github` 指向 `blender/blender`。这是官方文档承认的镜像，见
+  [Clone & Update](https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/)
+  的「GitHub Mirror」一节；已核对该镜像包含本项目基准提交
+  `d13f752e3b9c4f8c261cda552b1021f8bcc0382c` 与标签 `v5.2.2`。
+- `gitee` 指向 `mirrors/blender`。Gitee 上 **没有 Blender 官方镜像**，这是 Gitee mirrors 组织
+  同步的第三方镜像；核对时它有 `blender-v5.2-release` 分支与 `v5.2.2` 标签，两者都指向与
+  官方相同的对象（标签就是基准 commit `d13f752e…`，且可从该镜像按 SHA 取到）。它的分支
+  顶端 SHA 与官方不同（`c361aec8…` 对 `fab76e95…`），因为同步状态由维护者决定；脚本核对
+  的是基准 **commit** 而不是分支顶端，所以这条差异不影响使用。
+  同平台上另有 `blender_5/blender`，它停在 `blender-v5.0-release`，不能用于本基准。
+  脚本先用 `git ls-remote` 探测基准分支、克隆后再核 `git rev-parse HEAD`，落后时立刻失败
+  并提示改用 `--mirror=official`，不会先下完约 1.5 GiB 的主仓库才发现白拉。
+- `--mirror-url` 可覆盖任何预设，用于自建镜像或公司内网 GitLab。
+
+镜像状态会随维护者变化，脚本每次运行都重新核验，文档里的结论只代表核对当时的情况。
+
+镜像只换下载地址，**不改变构建方式**：
+
+- 镜像保留的是同一批 commit，`make.bat`、`GNUmakefile`、`build_files/`、`CMakeLists.txt`
+  与官方逐字相同（核对时用 `v5.2.2` 的 `BKE_blender_version.h`、`.gitmodules` 与本地检出
+  逐条比对过），构建入口仍然是 `scons build-blender`。
+- `lib/` 预编译库仍由 `projects.blender.org` 提供：镜像里的 `.gitmodules` 指向
+  `https://projects.blender.org/blender/lib-<平台>_<架构>.git`，由 `init-blender` 在所有
+  平台按这份配置下载（Windows 上不再依赖 `make.bat` 的交互询问）。
+- 主仓库的 Git LFS 对象不在镜像里，而 **构建确实需要它们**：上游 `CMakeLists.txt` 在
+  configure 阶段检查 `release/datafiles/startup.blend`，指针文件会让它直接
+  `FATAL_ERROR`（"Detected incomplete startup blend"）；图标、画笔、ICC 配置等也会被打进
+  产物——这些上游并不检查，只查那一个文件，所以"半个 LFS"能配置通过却产出坏的 Blender。
+  `init-blender` 因此 **全量** 核对 `git lfs ls-files` 的每个路径，而不是抽查一两个文件。
+- **所有镜像（含官方）** 在克隆与子模块更新阶段都跳过 LFS smudge：逐文件串行 smudge
+  实测只有几十 KiB/s，镜像更会直接失败；随后由 `init-blender` 用一次并发
+  `git lfs fetch` 补齐（`lfs.concurrenttransfers=32`，实测把
+  `projects.blender.org` 从 0.43 MiB/s 提到 1.6 MiB/s；默认 8 个连接）。镜像还要先加
+  `lfs-fallback` 远端并 `lfs checkout`。这与上游
+  `build_files/utils/make_update.py` 对第三方检出做的 `lfs_fallback_setup()` 一致。
+  `build-blender` 在 configure 前再按同一套全量判据核对一次，指到 `init-blender` 而不是把
+  上游的 `make update` 报错丢给读者。
+
+镜像不是绕过依赖的捷径：网络受限时，`lib/` 子模块与主仓库的 LFS 数据仍然要走官方服务器，
+镜像只省下主仓库的历史对象。
 
 ## 四、生成工程并构建 Blender
 
@@ -84,13 +148,14 @@ python qa/check_source_refs.py --source "D:/src/blender"
 scons build-blender
 ```
 
-`build-blender` 项目包装层只读核验源码提交和已有的 `lib/<平台>_<架构>`，
-自身不会运行 `make update`、`git pull/fetch`、子模块更新或 Git LFS 下载。但
-Windows 上 Blender 上游 `make.bat` 自带依赖检查与懒下载逻辑；这是上游
-构建流程的一部分，项目包装层不屏蔽其询问或改变其行为。
+`build-blender` 项目包装层只读核验源码提交、Git LFS 是否已还原和已有的
+`lib/<平台>_<架构>`，自身不会运行 `make update`、`git pull/fetch`、子模块更新或 Git LFS
+下载。三者任一没准备好，它会在 configure 之前直接失败并指向 `scons init-blender`，
+而不是把上游的询问或 `make update` 报错丢给读者。Windows 上游 `make.bat` 的依赖检查与
+懒下载逻辑保持原样，只是库已就绪时它不会再询问。
 
-所有平台仍应先运行 `init-blender`来准备源码并检查工具链。Linux/macOS 的官方
-流程另外要求在构建前准备预编译库，这一前置步骤才由 `init-blender` 完成。
+所有平台都应先运行 `scons init-blender`：它准备源码、主仓库 LFS 与平台预编译库并检查
+工具链，完成后 `build-blender` 直接可用。
 
 Windows 先使用 Blender 上游 `make.bat ... nobuild` 生成 out-of-source Visual Studio
 CMake 工程，再通过 `cmake --build` 构建 solution 中的 `INSTALL` 目标。默认工程目录为
@@ -98,8 +163,11 @@ CMake 工程，再通过 `cmake --build` 构建 solution 中的 `INSTALL` 目标
 `Blender.slnx`。Windows 构建入口仅使用 MSVC，会通过 `vswhere` 自动定位 Visual Studio 和
 C++ 工具集，因此不要求从 Developer Command Prompt 启动；工具集低于书稿基准要求时
 会立即报错并提示更新 Visual Studio。macOS/Linux 则在 `build_macos/` 或 `build_linux/` 中使用
-Ninja，找不到 Ninja
-时回退到 Unix Makefiles，并通过 CMake 构建 `install` 目标。
+Ninja，找不到 Ninja 时回退到 Unix Makefiles，并通过 CMake 构建 `install` 目标。
+
+Windows 的产物落在 `<构建目录>/bin/<配置>/blender.exe`（例如
+`build_windows/bin/Release/blender.exe`）；多配置生成器会把配置名多套一层，包装层在
+`INSTALL` 成功后会核对这个可执行文件确实存在，缺失即判失败。
 
 常用参数：
 

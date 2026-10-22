@@ -7,8 +7,8 @@ platform library submodule, and toolchain preparation belong to
 ``tools/init_blender.py``. It does not suppress dependency handling performed
 internally by Blender's own build scripts. This wrapper only:
 
-1. verifies that the checkout, pinned revision, and materialized libraries are
-   ready;
+1. verifies that the checkout, pinned revision, materialized Git LFS content, and
+   platform libraries are ready;
 2. generates an out-of-source CMake project;
 3. builds and installs Blender from that generated project.
 
@@ -33,8 +33,8 @@ from pathlib import Path
 
 from blender_baseline import BLENDER_BRANCH, BLENDER_COMMIT, BLENDER_VERSION
 from init_blender import (MSVC_TOOLSET_MIN, cmp_ver, dir_has_content,
-                          find_msvc_toolset, lfs_pointer_files, lib_submodule,
-                          tool_path)
+                          find_msvc_toolset, lfs_pointer, lfs_pointer_files,
+                          lib_submodule, repo_lfs_pointers, tool_path)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -171,8 +171,38 @@ def validate_source(source: Path, allow_other_revision: bool) -> bool:
     return True
 
 
-def validate_libraries(source: Path, allow_upstream_handling: bool) -> bool:
-    """Check dependencies without fetching; optionally defer to upstream tooling."""
+def validate_repo_lfs(source: Path) -> bool:
+    """Refuse to configure while the checkout still holds Git LFS pointer files.
+
+    Upstream ``CMakeLists.txt`` only checks the size of
+    ``release/datafiles/startup.blend``, so a checkout where that one file was
+    restored but thousands of icons/brushes were not still configures and then
+    ships a broken Blender. This check covers every LFS-tracked file.
+    """
+    pointers = repo_lfs_pointers(str(source))
+    if pointers is None:
+        sentinel = source / "release" / "datafiles" / "startup.blend"
+        if not sentinel.exists() or not lfs_pointer(str(sentinel)):
+            return True
+        pointers = [str(sentinel)]
+    if not pointers:
+        return True
+    say(BAD, "%d file(s) are still Git LFS pointer files, e.g.:" % len(pointers))
+    for rel in pointers[:5]:
+        say(INFO, "  %s" % rel)
+    say(INFO, "Blender's CMake configure refuses to start in that state.")
+    say(INFO, "Restore the LFS content (fetched from projects.blender.org):")
+    say(INFO, "  scons init-blender --src \"%s\"" % source)
+    return False
+
+
+def validate_libraries(source: Path) -> bool:
+    """Require the platform libraries that init-blender prepared.
+
+    The wrapper never fetches them: `scons init-blender` owns that step on every
+    platform (including Windows, where make.bat would otherwise ask a question
+    that a non-interactive session cannot answer).
+    """
     candidates = lib_submodule(platform.system(), platform.machine())
     if not candidates:
         say(INFO, "No project-managed precompiled library is defined for this platform.")
@@ -182,23 +212,15 @@ def validate_libraries(source: Path, allow_upstream_handling: bool) -> bool:
     name = candidates[0]
     library = source / "lib" / name
     if not dir_has_content(str(library)):
-        tag = WARN if allow_upstream_handling else BAD
-        say(tag, "Prepared platform dependencies are missing at %s." % library)
-        if allow_upstream_handling:
-            say(INFO, "Blender's upstream make.bat will handle or prompt for dependencies.")
-            return True
+        say(BAD, "Prepared platform dependencies are missing at %s." % library)
         say(INFO, "Run 'scons init-blender' before building.")
         return False
 
     pointers = lfs_pointer_files(str(library))
     if pointers:
-        tag = WARN if allow_upstream_handling else BAD
-        say(tag, "lib/%s still contains Git LFS pointer files:" % name)
+        say(BAD, "lib/%s still contains Git LFS pointer files:" % name)
         for pointer in pointers:
             say(INFO, "  %s" % pointer)
-        if allow_upstream_handling:
-            say(INFO, "Continuing with Blender's upstream dependency handling unchanged.")
-            return True
         say(INFO, "Run 'scons init-blender' to restore dependencies.")
         return False
 
@@ -273,7 +295,14 @@ def windows_build(source: Path, build_dir: Path, config: str,
     result = run_live(build, "Build the generated Visual Studio INSTALL target", cwd=ROOT)
     if result.returncode != 0:
         return False
-    say(OK, "Windows build output: %s" % (build_dir / "bin"))
+    # INSTALL 的前缀是 <build>/bin，多配置生成器再套一层 <config>。
+    output = build_dir / "bin" / config
+    exe = output / "blender.exe"
+    if not exe.is_file():
+        say(BAD, "CMake reported success, but %s is missing." % exe)
+        say(INFO, "Check the INSTALL step above; the build directory was kept.")
+        return False
+    say(OK, "Windows build output: %s" % output)
     return True
 
 
@@ -344,7 +373,7 @@ def main() -> int:
     ))
     print("Configuration: %s" % args.config)
     print("Mode         : %s" % ("configure-only" if args.configure_only else "configure + build"))
-    print("Dependencies : wrapper does not fetch; upstream build behavior is preserved")
+    print("Dependencies : verified only; 'scons init-blender' prepares them")
     print("=" * 70)
 
     if same_path(source, build_dir) or source in build_dir.parents:
@@ -352,7 +381,9 @@ def main() -> int:
         return 1
     if not validate_source(source, args.allow_other_revision):
         return 1
-    if not validate_libraries(source, allow_upstream_handling=(system == "Windows")):
+    if not validate_repo_lfs(source):
+        return 1
+    if not validate_libraries(source):
         return 1
 
     if system == "Windows":
