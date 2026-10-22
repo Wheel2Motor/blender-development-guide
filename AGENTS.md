@@ -3,8 +3,8 @@
 这是一本 **技术书的书稿工程**，不是一个软件项目。改动的验收标准是
 「PDF 能编译、版面正确、引用与源码相符」，不是「测试通过」。
 
-> **首次接手**：先跑 `scons init-book`（检查 Typst、**下载字体到
-> `book/fonts/`**、目录骨架、cetz 宏包预取），再跑 `scons build-book`。
+> **首次接手**：先运行 `scons init-book`（检查 Typst、**下载字体到
+> `book/fonts/`**、目录骨架、cetz 宏包预取），再运行 `scons build-book`。
 > **`init-book` 不构建书稿** —— PDF 或实验性 HTML 都由 `build-book` 生成。
 > `build-book` 也绝不下载字体：它先按 `.manifest.json` 做只读预检，缺失、损坏或哈希
 > 不符就非零退出并引导运行 `init-book`。`init-book` 下载到临时目录，校验通过后才原子
@@ -40,7 +40,7 @@
 **两类最危险的错误**：① 把负向 sdna 映射当正向；② "看起来合理但源码里查不到"的
 分布性断言（"只有 9 个文件用了 X"）。写这两类话之前一定先 `git grep` 数一遍。
 
-### 2. 改完必须跑这三步验证
+### 2. 改完必须运行这三步验证
 
 ```bash
 python qa/check_examples.py           # 完整示例脚注、文件覆盖与 Python 语法
@@ -49,7 +49,7 @@ scons build-book --format=html        # 实验性 HTML：先生成 SVG、网页�
 scons build-book --check              # ② + ③ 逐页渲染 + 版心溢出扫描（约十分钟）
 ```
 
-`--check` 做的事就是下面这串手工命令，跑完会自动删掉 `book/build/page-*.png`：
+`--check` 做的事就是下面这串手工命令，运行完会自动删掉 `book/build/page-*.png`：
 
 ```bash
 cd book
@@ -148,7 +148,7 @@ python qa/check_markdown.py
   **全字符覆盖审计结论（实测）**：把全书源码（含 `figures/`、`examples/`）与最终
   PDF 的字符集合，分别与 `book/fonts/` 全部字体 cmap 的并集做差集 ——
   **渲染层差集为空**；源码层唯一"缺"的是制表符 `\t`（不产生字形）。
-  即 **全书不存在任何会渲染成缺字方框的字符**。改动字体后建议重跑该审计。
+  即 **全书不存在任何会渲染成缺字方框的字符**。改动字体后建议重新运行该审计。
 
   写法上仍要记住：**每处显式 `#set text` 都给 `weight`**（`font-zh` 现在有
   Regular/Bold 两份 OTF，但历史上用过默认实例为 Thin 的可变字体，别退回那个坑）。

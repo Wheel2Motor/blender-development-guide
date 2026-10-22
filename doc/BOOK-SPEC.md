@@ -203,7 +203,7 @@
 
 ## 六、构建方式与 CMake 的讲解要求
 
-- **三平台都要覆盖**：Windows（Visual Studio / MSYS2）、macOS（Xcode CLT + Homebrew）、Linux（发行版包管理器）。每章给出该平台的完整“从零到跑起来”步骤，并标注三平台差异。
+- **三平台都要覆盖**：Windows（Visual Studio / MSYS2）、macOS（Xcode CLT + Homebrew）、Linux（发行版包管理器）。每章给出该平台的完整“从零到运行成功”步骤，并标注三平台差异。
 - **CMake 等必要工具可“稍提”但讲清楚**：不需要写成 CMake 专著，但要讲清读者实际会用到的部分——目标/生成器/构建目录/缓存/常用配置项/`BUILD_DIR`/多配置与单配置生成器的区别/如何生成 IDE 工程。控制在“够用”范围。
 - **依赖获取**：明确当前版本（以实际克隆到的分支为准）预编译库是 **Git LFS 子模块** 还是 svn——以源码里的 `.gitmodules` 和 `build_files/utils/make_update.py` 为准，不要照搬旧资料。
 - **不许 hack**：缺工具用官方途径安装（macOS 用 Homebrew、Linux 用包管理器、Windows 用官方安装包/包管理器），不要用“绕过 SSL 校验/跳过依赖/改奇怪配置”让代码勉强编译。
