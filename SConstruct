@@ -82,6 +82,8 @@ init-blender options:
                         everything first. An existing checkout is never rewritten.
   --mirror-url=URL      Clone URL that overrides --mirror, e.g. a self-hosted
                         mirror or a company GitLab.
+  --retries=N           Retries after a failed network step (default: 10).
+  --retry-delay=SECONDS Seconds between those retries (default: 10).
 
 build-blender options:
   --src=DIR                 Build this source directory (default: ./blender).
@@ -110,6 +112,7 @@ Examples:
   scons init-blender --mirror=github
   scons init-blender --mirror=gitee
   scons init-blender --mirror-url=https://git.example.com/blender.git
+  scons init-blender --retries=30 --retry-delay=20
   scons build-blender --blender-config=Debug -j 12
   scons bump-version --minor
 """
@@ -134,6 +137,10 @@ AddOption("--mirror", dest="blender_mirror", type="choice",
           help="source mirror for a new Blender clone: official, github, or gitee")
 AddOption("--mirror-url", dest="blender_mirror_url", type="string", default=None,
           help="override the mirror clone URL, e.g. a self-hosted mirror")
+AddOption("--retries", dest="blender_retries", type="int", default=10,
+          help="retries after a failed network step during init-blender (default: 10)")
+AddOption("--retry-delay", dest="blender_retry_delay", type="float", default=10.0,
+          help="seconds between network retries during init-blender (default: 10)")
 AddOption("--build-dir", dest="blender_build_dir", type="string", default=None,
           help="override the Blender CMake build directory")
 AddOption("--blender-config", dest="blender_config", type="choice",
@@ -186,6 +193,8 @@ def _script_args(alias: str) -> list[str]:
         args.extend(("--mirror", GetOption("blender_mirror")))
         if GetOption("blender_mirror_url"):
             args.extend(("--mirror-url", GetOption("blender_mirror_url")))
+        args.extend(("--retries", str(GetOption("blender_retries"))))
+        args.extend(("--retry-delay", str(GetOption("blender_retry_delay"))))
     elif alias == "build-blender":
         if GetOption("source_dir"):
             args.extend(("--src", GetOption("source_dir")))
@@ -235,6 +244,9 @@ def _run_script(target, source, env) -> int:  # noqa: ANN001
         return 2
     if alias != "init-blender" and _option_was_explicit("--mirror", "--mirror-url"):
         print("[FAIL] --mirror and --mirror-url only apply to init-blender.")
+        return 2
+    if alias != "init-blender" and _option_was_explicit("--retries", "--retry-delay"):
+        print("[FAIL] --retries and --retry-delay only apply to init-blender.")
         return 2
     release = alias == "build-book" and GetOption("book_release")
     book_format = GetOption("book_format")

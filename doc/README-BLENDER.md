@@ -99,6 +99,23 @@ scons init-blender --mirror-url="https://git.example.com/blender.git"
 `--mirror` 默认为 `official`，只影响 **主仓库** 的克隆来源，`--check-only`、`--src` 照旧可用；
 只在需要克隆时生效，已有检出不会被改写来源。
 
+### 网络重试
+
+所有联网步骤（基准分支探测、克隆、取基准 commit、主仓库 LFS、`lib/` 子模块与其 LFS）
+失败后都会自动重试：默认失败后最多再试 **10 次**、每次间隔 **10 秒**。下载是幂等的，
+重试只补缺口，不会重复整份传输；克隆重试前会先删掉它自己没下完的目录，不会留下半成品。
+
+```bash
+scons init-blender --retries=30 --retry-delay=20   # 网络差时放宽
+scons init-blender --retries=0                     # 关闭重试，失败即退出
+```
+
+这些步骤之间没有可以安全并行的地方：主仓库 LFS 与 `lib/` LFS 都由同一台
+`projects.blender.org` 提供，实测该服务器在约 2 MiB/s 处就是上限（把单连接的
+`lfs.concurrenttransfers` 从 32 提到 64 只从 1.6 升到 2.0 MiB/s），两条流同时跑只会
+平分同一个上限，还会把两个进度条交织在同一个终端里。真正的顺序依赖也存在：`lib/`
+必须先检出子模块才能拉它的 LFS。
+
 - `github` 指向 `blender/blender`。这是官方文档承认的镜像，见
   [Clone & Update](https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/)
   的「GitHub Mirror」一节；已核对该镜像包含本项目基准提交

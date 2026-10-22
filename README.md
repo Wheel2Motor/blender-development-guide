@@ -150,13 +150,15 @@ scons init-blender --mirror=official
 scons init-blender --mirror=github
 scons init-blender --mirror=gitee
 scons init-blender --mirror-url=https://git.example.com/blender.git
+scons init-blender --retries=30 --retry-delay=20
 scons build-blender --blender-config=Debug -j 12
 scons bump-version --minor
 ```
 
 `--mirror` 与 `--mirror-url` 只属于 `init-blender`，且只在需要克隆时生效：已有检出只会被
-核对与报告，不会被改写来源。SCons 的自定义参数一律写成 `--opt=value`
-（例如 `--src=D:/src/blender`），空格分隔会被当成缺少参数。
+核对与报告，不会被改写来源。所有联网步骤失败后默认重试 10 次、每次间隔 10 秒，可用
+`--retries` 与 `--retry-delay` 调整（两者也只属于 `init-blender`）。SCons 的自定义参数
+一律写成 `--opt=value`（例如 `--src=D:/src/blender`），空格分隔会被当成缺少参数。
 
 发布新版本前，先把改动以无序列表写入 `RELEASE_NOTE.md` 的 `Pending` 段，再运行
 `scons bump-version --major`、`--minor` 或 `--micro` 中恰好一个。命令会同步更新

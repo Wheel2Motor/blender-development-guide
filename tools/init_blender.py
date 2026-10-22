@@ -30,6 +30,7 @@
     python tools/init_blender.py --mirror github   # 从 GitHub 官方镜像克隆
     python tools/init_blender.py --mirror gitee    # 从 Gitee 镜像克隆（第三方同步）
     python tools/init_blender.py --mirror-url URL  # 用任意镜像地址（自建、公司内网）
+    python tools/init_blender.py --retries 30 --retry-delay 20   # 网络差时放宽重试
 
 ``--mirror`` 只改主仓库的克隆来源：``lib/`` 平台库和主仓库的 Git LFS 对象仍由
 projects.blender.org 提供（镜像里的 ``.gitmodules``、``.gitattributes`` 与官方逐字
@@ -37,6 +38,10 @@ projects.blender.org 提供（镜像里的 ``.gitmodules``、``.gitattributes`` 
 内容必须还原成实体文件——上游 ``CMakeLists.txt`` 见到指针形态的
 ``release/datafiles/startup.blend`` 会直接 FATAL——镜像克隆因此会从官方补取
 （见 ``ensure_repo_lfs()``）。
+
+所有联网步骤（克隆、基准 commit、LFS、子模块）失败后都会自动重试：默认最多 10 次、
+每次间隔 10 秒，可用 ``--retries`` 与 ``--retry-delay`` 调整。下载是幂等的，
+重试只补缺口。
 
 设计原则：**只增不删、不擅自改用户工作区**。已经存在的源码目录只会被核对与告警，
 不会被 checkout / reset。
@@ -84,6 +89,10 @@ BLENDER_REPO = MIRRORS["official"]
 # 32 是速度与对服务器压力的折中；`-c` 会经 GIT_CONFIG_PARAMETERS 传给 git-lfs
 # 子进程（用 `git lfs env` 验证过 ConcurrentTransfers 生效）。
 LFS_CONCURRENCY = 32
+# 网络操作的重试：默认失败后最多再重试 10 次、每次间隔 10 秒，可用
+# --retries / --retry-delay 覆盖。下载是幂等的（git 复用已落盘对象），重试只补缺口。
+RETRIES = 10
+RETRY_DELAY_S = 10.0
 
 
 def lfs_cmd(src: str, *args: str) -> list[str]:
@@ -188,6 +197,60 @@ def run_live(cmd: list[str], description: str,
         say(BAD, "%s failed after %.1f s (exit code %d)."
             % (description, elapsed, cp.returncode))
     return cp
+
+
+def discard_partial(path: str) -> None:
+    """删掉本次运行自己创建、但没下载完的目录（重试前清理用）。"""
+    say(INFO, "Removing the incomplete directory %s before retrying." % path)
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def run_with_retry(cmd: list[str], description: str,
+                   cwd: str | None = None,
+                   env: dict[str, str] | None = None,
+                   on_retry=None) -> subprocess.CompletedProcess:
+    """运行一条可能因网络失败的命令，失败后按 ``--retries``/``--retry-delay`` 重试。
+
+    下载类命令是幂等的：git 会复用已经落盘的对象，重试只补缺口，所以重试不会
+    重复整份传输。``on_retry`` 在两次尝试之间调用，用来清理半成品（例如残留的
+    clone 目录）。只在非零退出时重试；成功立刻返回，最后一次失败原样返回给调用方
+    判断（有些命令用退出码表达"确定不存在"，例如 ``git ls-remote``）。
+    """
+    attempts = RETRIES + 1
+    cp: subprocess.CompletedProcess | None = None
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            say(WARN, "Retrying %s in %.0f s (attempt %d of %d) ..."
+                % (description, RETRY_DELAY_S, attempt, attempts))
+            time.sleep(RETRY_DELAY_S)
+            if on_retry is not None:
+                on_retry()
+        label = description if attempt == 1 else (
+            "%s (attempt %d of %d)" % (description, attempt, attempts))
+        cp = run_live(cmd, label, cwd=cwd, env=env)
+        if cp.returncode == 0:
+            return cp
+    say(BAD, "Giving up on %s after %d attempt(s)." % (description, attempts))
+    return cp if cp is not None else subprocess.CompletedProcess(cmd, 127)
+
+
+def run_probe_with_retry(cmd: list[str], description: str,
+                         ok_codes: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess:
+    """同 ``run_with_retry``，但用于输出被捕获的探测命令（如 ``git ls-remote``）。
+
+    ``ok_codes`` 里列出的退出码视为"已经拿到确定结论"，立即返回、不再重试。
+    """
+    attempts = RETRIES + 1
+    cp: subprocess.CompletedProcess | None = None
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            say(WARN, "Retrying %s in %.0f s (attempt %d of %d) ..."
+                % (description, RETRY_DELAY_S, attempt, attempts))
+            time.sleep(RETRY_DELAY_S)
+        cp = run(cmd)
+        if cp.returncode in ok_codes:
+            return cp
+    return cp if cp is not None else subprocess.CompletedProcess(cmd, 127)
 
 
 def text_of(cp: subprocess.CompletedProcess) -> str:
@@ -453,8 +516,8 @@ def ensure_repo_lfs(src: str, official: bool) -> bool:
         return False
 
     if official:
-        cp = run_live(lfs_cmd(src, "pull"),
-                      "Restore Git LFS files from the official repository")
+        cp = run_with_retry(lfs_cmd(src, "pull"),
+                            "Restore Git LFS files from the official repository")
     else:
         have = git(src, "remote", "get-url", "lfs-fallback")
         if have.returncode != 0:
@@ -464,14 +527,14 @@ def ensure_repo_lfs(src: str, official: bool) -> bool:
             if cp.returncode != 0:
                 return False
         git(src, "config", "lfs.remote.searchall", "true")
-        cp = run_live(lfs_cmd(src, "fetch", "lfs-fallback"),
-                      "Fetch Git LFS objects from the official repository")
+        cp = run_with_retry(lfs_cmd(src, "fetch", "lfs-fallback"),
+                            "Fetch Git LFS objects from the official repository")
         if cp.returncode != 0:
             say(INFO, "Git printed the LFS error above. Without these files the")
             say(INFO, "Blender build cannot configure, so this counts as a failure.")
             return False
-        cp = run_live(lfs_cmd(src, "checkout"),
-                      "Materialize Git LFS files in the working tree")
+        cp = run_with_retry(lfs_cmd(src, "checkout"),
+                            "Materialize Git LFS files in the working tree")
 
     if cp.returncode != 0:
         say(BAD, "Git LFS restore failed (exit code %d)." % cp.returncode)
@@ -561,9 +624,14 @@ def ensure_source(src: str, check_only: bool, mirror: str, repo_url: str) -> boo
         return False
 
     # 先问一次远端有没有基准分支。镜像是别人同步的，可能落后好几个月；
-    # 先花几秒问一句，好过下完 7 GB 才发现分支根本不存在。
+    # 先花几秒问一句，好过下完 1.5 GiB 才发现分支根本不存在。
     # `--exit-code` 在“没有任何匹配的 ref”时返回 2，网络/DNS 故障返回 128。
-    probe = run(["git", "ls-remote", "--exit-code", "--heads", repo_url, BLENDER_BRANCH])
+    # 2 是确定结论，不重试；其余非零当作网络抖动，按重试参数再问。
+    probe = run_probe_with_retry(
+        ["git", "ls-remote", "--exit-code", "--heads", repo_url, BLENDER_BRANCH],
+        "Check whether %s has branch %s" % (mirror, BLENDER_BRANCH),
+        ok_codes=(0, 2),
+    )
     if probe.returncode == 2:
         say(BAD, "Mirror %s has no branch %s." % (mirror, BLENDER_BRANCH))
         say(INFO, "It is behind the official repository, so it cannot provide the pinned")
@@ -590,16 +658,17 @@ def ensure_source(src: str, check_only: bool, mirror: str, repo_url: str) -> boo
     say(INFO, "afterwards in one concurrent pass (see section 1).")
 
     say(INFO, "The source repository is large. Git will print transfer progress below.")
-    cp = run_live(
+    cp = run_with_retry(
         ["git", "clone", "--progress", "--branch", BLENDER_BRANCH,
          repo_url, src],
         "Clone Blender source (branch %s from %s)" % (BLENDER_BRANCH, mirror),
         env=env,
+        # 目录是这条命令自己创建的；重试前必须清掉，否则 git 会拒绝往非空目录克隆。
+        on_retry=lambda: discard_partial(src),
     )
     if cp.returncode != 0:
-        say(INFO, "Git printed the error above. A partial directory may remain at %s." % src)
-        say(INFO, "Move or remove that partial directory before retrying; this script will")
-        say(INFO, "not delete it automatically.")
+        say(INFO, "Git printed the error above; the incomplete directory is still at")
+        say(INFO, "%s. This script will not delete it automatically." % src)
         return False
 
     head = head_commit(src)
@@ -618,7 +687,7 @@ def ensure_source(src: str, check_only: bool, mirror: str, repo_url: str) -> boo
         say(OK, "Baseline commit %s is already in the clone." % BLENDER_COMMIT[:12])
     else:
         say(INFO, "Fetching baseline commit %s ..." % BLENDER_COMMIT[:12])
-        cp = run_live(
+        cp = run_with_retry(
             ["git", "-C", src, "fetch", "--progress", "--depth", "1",
              "origin", BLENDER_COMMIT],
             "Fetch baseline commit %s" % BLENDER_COMMIT[:12],
@@ -637,7 +706,7 @@ def ensure_source(src: str, check_only: bool, mirror: str, repo_url: str) -> boo
             say(INFO, "The checkout was left untouched so you can inspect or retry it safely.")
             return False
 
-    cp = run_live(
+    cp = run_with_retry(
         ["git", "-C", src, "checkout", "--progress", BLENDER_COMMIT],
         "Check out baseline commit %s" % BLENDER_COMMIT[:12],
     )
@@ -725,7 +794,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
                 say(INFO, "That needs git-lfs (see section 3); this script never installs it.")
                 return False
             say(INFO, "Normal mode will now restore the missing Git LFS content.")
-            cp = run_live(
+            cp = run_with_retry(
                 lfs_cmd(lib_path, "pull"),
                 "Restore Git LFS files for lib/%s" % name,
             )
@@ -770,18 +839,20 @@ def ensure_libs(src: str, check_only: bool) -> bool:
     # 也是先 `git config --local submodule.<path>.update checkout` 再更新。
     # 同时跳过 smudge：lib 仓库是 LFS，逐文件串行 smudge 实测只有几十 KiB/s，
     # 换成下面一次并发的 `git lfs pull`。
-    cp = run_live(
+    cp = run_with_retry(
         ["git", "-C", src, "-c", "submodule.lib/%s.update=checkout" % name,
          "submodule", "update", "--init", "--progress", "--", "lib/" + name],
         "Fetch submodule lib/%s (Git checkout only)" % name,
         env=dict(os.environ, GIT_LFS_SKIP_SMUDGE="1"),
+        # 目录同样是子模块命令自己创建的，重试前清掉半成品。
+        on_retry=lambda: discard_partial(lib_path),
     )
     if cp.returncode != 0:
         say(INFO, "Git printed the submodule error above.")
         return False
 
     if tool_path("git-lfs"):
-        cp = run_live(
+        cp = run_with_retry(
             lfs_cmd(lib_path, "pull"),
             "Fetch Git LFS content for lib/%s" % name,
         )
@@ -797,7 +868,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
             say(WARN, "Git LFS files are still pointers after submodule checkout:")
             for p in ptrs:
                 say(INFO, "  %s" % p)
-            cp = run_live(
+            cp = run_with_retry(
                 lfs_cmd(lib_path, "pull"),
                 "Restore Git LFS files for lib/%s" % name,
             )
@@ -1124,6 +1195,8 @@ def next_steps(src: str) -> None:
 
 
 def main() -> int:
+    # 网络步骤共用的重试设置（模块级状态，由 run_with_retry 读取）。
+    global RETRIES, RETRY_DELAY_S
     ap = argparse.ArgumentParser(description="Initialize the Blender source tree and dev tools.")
     ap.add_argument("--check-only", action="store_true",
                     help="only inspect; do not clone and do not fetch the lib submodule "
@@ -1135,7 +1208,20 @@ def main() -> int:
                          "(official mirror) or gitee (third-party mirror)")
     ap.add_argument("--mirror-url",
                     help="override the mirror clone URL, e.g. a self-hosted mirror")
+    ap.add_argument("--retries", type=int, default=RETRIES,
+                    help="retries after a failed network step (default: %d)" % RETRIES)
+    ap.add_argument("--retry-delay", type=float, default=RETRY_DELAY_S,
+                    help="seconds to wait between retries (default: %.0f)" % RETRY_DELAY_S)
     args = ap.parse_args()
+
+    if args.retries < 0:
+        ap.error("--retries must be zero or a positive integer")
+    if args.retry_delay < 0:
+        ap.error("--retry-delay must be zero or a positive number of seconds")
+
+    # 网络步骤共用的重试设置已在函数开头声明为 global。
+    RETRIES = args.retries
+    RETRY_DELAY_S = args.retry_delay
 
     src = os.path.abspath(args.src)
     repo_url = mirror_url(args.mirror, args.mirror_url)
@@ -1148,6 +1234,8 @@ def main() -> int:
         BLENDER_VERSION, BLENDER_BRANCH, BLENDER_COMMIT
     ))
     print("Mirror       : %s (%s)" % (mirror_name, repo_url))
+    print("Retries      : %d attempt(s) after the first failure, %.0f s apart"
+          % (RETRIES, RETRY_DELAY_S))
     print("Mode         : %s" % ("check-only" if args.check_only else "init"))
     print("=" * 70)
 

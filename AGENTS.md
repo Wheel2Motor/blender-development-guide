@@ -234,6 +234,10 @@ python qa/check_markdown.py
 `--release` 与 `--use-system-fonts` 必须保持互斥；发布包只能使用项目固定字体。
 `--mirror` 与 `--mirror-url` 只适用于 `init-blender`，只改主仓库的克隆来源，且只在克隆时
 生效；镜像缺少基准分支或提交时必须非零退出，其余 alias 传入应直接拒绝。
+`--retries` 与 `--retry-delay` 也只适用于 `init-blender`：所有联网步骤失败后默认重试
+10 次、间隔 10 秒，必须可被命令行覆盖且默认值写在帮助里；克隆重试前只能删它自己刚创建
+的目录。不要为"更快"把主仓库 LFS 与 `lib/` LFS 并行——两者共用同一个约 2 MiB/s 的
+服务器上限（实测并发连接 32→64 只到 1.6→2.0 MiB/s），并行只会平分带宽并搅乱终端进度。
 `--format=html` 不能与 `--check` 或 `--release` 组合；HTML 只放行 Typst 已知的实验导出
 警告。新增 `book/figures/<name>.typ` 时必须导出零参数 `fig-<name>()`；章节内直接写
 `figure(canvas(...))` 时必须带唯一 `<fig-...>` 标签，供 HTML 资源构建器发现。
