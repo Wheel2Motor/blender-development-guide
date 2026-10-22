@@ -189,8 +189,8 @@ python qa/check_markdown.py
   实测把 `projects.blender.org` 从 0.43 MiB/s 提到 1.6 MiB/s）；`lib/` 子模块同理。
   还原后必须按 `git lfs ls-files` **全量** 核对，不能只查 `startup.blend`——上游只查那一个
   文件，半个 LFS 的树能配置通过、产出却缺图标/画笔/ICC 数据。
-  中断的 git 操作会留下 `.git/index.lock`，脚本会告警（不替用户删文件），否则 LFS 文件会
-  一直显示为 modified。
+  中断的 git 操作会在主仓库和 `lib/` 的 git 目录里留下 `.git/index.lock`，脚本会告警
+  （不替用户删文件），否则 LFS 文件会一直显示为 modified。
   镜像可能落后：脚本用 `git ls-remote` 先查基准分支、克隆后再核 `git rev-parse HEAD`，
   两者不一致就非零退出，不得为了让镜像“能用”而放宽这条核对或跳过基准 commit。
 - 升级基准不能只修改版本字符串。更新 `book/blender-baseline.json` 后，必须重新核对

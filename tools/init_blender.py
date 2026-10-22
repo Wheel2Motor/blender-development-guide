@@ -311,6 +311,35 @@ def lfs_pointer_files(path: str, limit: int = 400) -> list[str]:
 # ---------------------------------------------------------------------------
 # 0) 镜像选择
 # ---------------------------------------------------------------------------
+def git_dir(repo: str) -> str | None:
+    """返回仓库的 git 目录（子模块里是 ``.git`` 文件指向的路径）。"""
+    cp = git(repo, "rev-parse", "--git-dir")
+    if cp.returncode != 0:
+        return None
+    path = first_line(text_of(cp))
+    if not path:
+        return None
+    return path if os.path.isabs(path) else os.path.normpath(os.path.join(repo, path))
+
+
+def warn_stale_index_lock(repo: str, label: str) -> None:
+    """中断的 git/git-lfs 操作可能留下 index.lock，导致索引再也刷新不了。
+
+    不替用户删文件（可能还有 git 进程在运行），只明确告警，避免出现
+    "内容都对、`git status` 却显示几千个文件已修改"的困惑。
+    """
+    gdir = git_dir(repo)
+    if not gdir:
+        return
+    lock = os.path.join(gdir, "index.lock")
+    if not os.path.exists(lock):
+        return
+    say(WARN, "Found a stale index.lock in the %s git directory." % label)
+    say(INFO, "An interrupted git/git-lfs run left it behind; git cannot refresh")
+    say(INFO, "the index until it is gone, so LFS files keep showing as modified.")
+    say(INFO, "Make sure no git process is running, delete %s, then re-run." % lock)
+
+
 def mirror_url(mirror: str, override: str | None) -> str:
     """把 ``--mirror`` 与 ``--mirror-url`` 解析成一个克隆 URL。
 
@@ -354,25 +383,31 @@ def lfs_pointer(path: str, threshold: int = 1024) -> bool:
         return False
 
 
-def repo_lfs_pointers(src: str) -> list[str] | None:
-    """列出主仓库里仍是 LFS 指针文件的路径（全量，不是抽样）。
+def lfs_pointers(repo: str) -> list[str] | None:
+    """列出该仓库里仍是 LFS 指针文件的路径（全量，不是抽样）。
 
-    只查 ``startup.blend`` 会让"半成品"蒙混过关：`git lfs pull` 被中断时它可能
-    已经落地，而 ICC 配置、图标、画笔等几千个文件还是指针——上游 CMake 只看
-    ``startup.blend``，所以那种树会配置通过、产出却是坏的。
+    主仓库和 `lib/` 子模块都是 Git LFS 仓库，都适用。只查一个"代表文件"会让
+    半成品蒙混过关：`git lfs pull` 被中断时那个文件可能已落地，其余几千个还是
+    指针——上游 CMake 只查 `startup.blend`，那样的树会被放行、产出却是坏的。
 
     返回 ``None`` 表示 `git lfs ls-files` 不可用（没装 git-lfs），调用方退回
-    上游那条单文件检查。
+    按文件大小/头部抽样的 ``lfs_pointer_files()``。
     """
-    cp = git(src, "lfs", "ls-files", "--name-only")
+    cp = git(repo, "lfs", "ls-files", "--name-only")
     if cp.returncode != 0:
         return None
     hits: list[str] = []
     for rel in text_of(cp).splitlines():
         rel = rel.strip()
-        if rel and lfs_pointer(os.path.join(src, rel)):
+        if rel and lfs_pointer(os.path.join(repo, rel)):
             hits.append(rel)
     return hits
+
+
+def lib_pointers(lib_path: str) -> list[str]:
+    """``lib/<平台>_<架构>`` 里的指针文件：优先全量，没装 git-lfs 时退回抽样。"""
+    found = lfs_pointers(lib_path)
+    return lfs_pointer_files(lib_path) if found is None else found
 
 
 def ensure_repo_lfs(src: str, official: bool) -> bool:
@@ -388,15 +423,8 @@ def ensure_repo_lfs(src: str, official: bool) -> bool:
     等价于上游 ``make_update.py`` 的 ``lfs_fallback_setup()``。
     """
     sentinel = os.path.join(src, "release", "datafiles", "startup.blend")
-    lock = os.path.join(src, ".git", "index.lock")
-    if os.path.exists(lock):
-        # 上一次中断的 git/lfs 操作留下的锁：git 之后既不能刷新索引也改不了它，
-        # 结果 LFS 文件全部显示为 modified（内容其实是对的）。不替用户删文件。
-        say(WARN, "Found a stale %s." % os.path.relpath(lock, src))
-        say(INFO, "An interrupted git/git-lfs run left it behind; git cannot refresh")
-        say(INFO, "the index until it is gone, so LFS files keep showing as modified.")
-        say(INFO, "Make sure no git process is running, delete that file, then re-run.")
-    pointers = repo_lfs_pointers(src)
+    warn_stale_index_lock(src, "source checkout")
+    pointers = lfs_pointers(src)
     if pointers is None:
         # 没有 git-lfs：只能按上游的判据检查那一个文件。
         pointers = [os.path.relpath(sentinel, src)] if lfs_pointer(sentinel) else []
@@ -448,7 +476,7 @@ def ensure_repo_lfs(src: str, official: bool) -> bool:
     if cp.returncode != 0:
         say(BAD, "Git LFS restore failed (exit code %d)." % cp.returncode)
         return False
-    remaining = repo_lfs_pointers(src)
+    remaining = lfs_pointers(src)
     if remaining is None:
         remaining = [os.path.relpath(sentinel, src)] if lfs_pointer(sentinel) else []
     if remaining:
@@ -682,7 +710,8 @@ def ensure_libs(src: str, check_only: bool) -> bool:
 
     if dir_has_content(lib_path):
         say(OK, "lib/%s exists and is not empty." % name)
-        ptrs = lfs_pointer_files(lib_path)
+        warn_stale_index_lock(lib_path, "lib/%s" % name)
+        ptrs = lib_pointers(lib_path)
         if ptrs:
             LFS_NEEDED = ("lib/%s still contains un-restored Git LFS pointer files" % name)
             can_restore = not check_only and bool(tool_path("git-lfs"))
@@ -702,7 +731,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
             )
             if cp.returncode != 0:
                 return False
-            ptrs = lfs_pointer_files(lib_path)
+            ptrs = lib_pointers(lib_path)
             if ptrs:
                 say(BAD, "Git LFS pointer files remain after 'git lfs pull'.")
                 return False
@@ -762,7 +791,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
 
     if dir_has_content(lib_path):
         say(OK, "lib/%s fetched and is not empty." % name)
-        ptrs = lfs_pointer_files(lib_path)
+        ptrs = lib_pointers(lib_path)
         if ptrs:
             LFS_NEEDED = ("lib/%s still contains un-restored Git LFS pointer files" % name)
             say(WARN, "Git LFS files are still pointers after submodule checkout:")
@@ -774,7 +803,7 @@ def ensure_libs(src: str, check_only: bool) -> bool:
             )
             if cp.returncode != 0:
                 return False
-            ptrs = lfs_pointer_files(lib_path)
+            ptrs = lib_pointers(lib_path)
             if ptrs:
                 say(BAD, "Git LFS pointer files remain after 'git lfs pull'.")
                 return False

@@ -34,7 +34,7 @@ from pathlib import Path
 from blender_baseline import BLENDER_BRANCH, BLENDER_COMMIT, BLENDER_VERSION
 from init_blender import (MSVC_TOOLSET_MIN, cmp_ver, dir_has_content,
                           find_msvc_toolset, lfs_pointer, lfs_pointer_files,
-                          lib_submodule, repo_lfs_pointers, tool_path)
+                          lib_pointers, lib_submodule, lfs_pointers, tool_path)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -179,7 +179,7 @@ def validate_repo_lfs(source: Path) -> bool:
     restored but thousands of icons/brushes were not still configures and then
     ships a broken Blender. This check covers every LFS-tracked file.
     """
-    pointers = repo_lfs_pointers(str(source))
+    pointers = lfs_pointers(str(source))
     if pointers is None:
         sentinel = source / "release" / "datafiles" / "startup.blend"
         if not sentinel.exists() or not lfs_pointer(str(sentinel)):
@@ -216,7 +216,7 @@ def validate_libraries(source: Path) -> bool:
         say(INFO, "Run 'scons init-blender' before building.")
         return False
 
-    pointers = lfs_pointer_files(str(library))
+    pointers = lib_pointers(str(library))
     if pointers:
         say(BAD, "lib/%s still contains Git LFS pointer files:" % name)
         for pointer in pointers:

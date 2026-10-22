@@ -127,7 +127,8 @@ scons init-blender --mirror-url="https://git.example.com/blender.git"
   configure 阶段检查 `release/datafiles/startup.blend`，指针文件会让它直接
   `FATAL_ERROR`（"Detected incomplete startup blend"）；图标、画笔、ICC 配置等也会被打进
   产物——这些上游并不检查，只查那一个文件，所以"半个 LFS"能配置通过却产出坏的 Blender。
-  `init-blender` 因此 **全量** 核对 `git lfs ls-files` 的每个路径，而不是抽查一两个文件。
+  `init-blender` 因此 **全量** 核对 `git lfs ls-files` 的每个路径（主仓库与 `lib/` 子模块
+  都一样），而不是抽查一两个文件。
 - **所有镜像（含官方）** 在克隆与子模块更新阶段都跳过 LFS smudge：逐文件串行 smudge
   实测只有几十 KiB/s，镜像更会直接失败；随后由 `init-blender` 用一次并发
   `git lfs fetch` 补齐（`lfs.concurrenttransfers=32`，实测把
