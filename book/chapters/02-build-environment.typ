@@ -3,24 +3,22 @@
 
 = 第 2 章 三平台开发环境与构建
 
-第 1 章给出了源码地图。本章解决如何*把它运行起来*：从一台尚未配置开发环境的机器
-开始，获取源码与依赖，完成配置和编译，最终得到一个可以启动、调试和迭代修改的 Blender。
+第 1 章给出了源码地图，本章把这张地图变成一套可执行的构建流程：准备工具，获取源码与
+依赖，完成配置和构建，最后启动自己编译的 Blender。三平台共用同一套 CMake 工程，
+差别主要集中在构建入口、编译器、平台依赖和产物形态。
 
-构建值得单独用一章讲，原因有三。第一，*前期成本高*：Blender 的 C/C++ 源码有
-8,900 多个文件、374 万行，Release 构建通常需要几十分钟到数小时，环境错误会显著放大
-试错成本。第二，*环境约束明确*：工具版本、路径与生成器必须满足构建系统的要求。
-第三，也是本章最想强调的一点：*构建行为应以源码为准，而不是以旧教程为准*。
-例如"Windows 上用 GNU Make 驱动构建"、"用 SVN 获取预编译库"、"Intel Mac 使用
-`lib/macos_x64`"等旧说法，在 5.2 上都不成立。
-本章出现的每一条命令、每一个开关、每一条路径都在本书采用的 Blender 源码版本中核对过，
-并给出「文件路径:行号」，你可以照着行号自己复查一遍。
+Blender 的构建耗时较长，工具版本或依赖出错会显著放大试错成本。更重要的是，构建流程会
+随版本演进；例如 Windows 使用 `make.bat` 而不是 GNU Make，当前预编译库通过 Git 子模块
+和 Git LFS 获取，macOS 也不再提供 `lib/macos_x64`。因此，本章以书中核对的 Blender
+版本为准，并在关键结论后标出对应源码位置。读者只需先抓住“准备 → 更新 → 配置 → 构建 →
+运行”这条主线；完整命令和平台差异分别集中在附录 C、D，排错方法集中在附录 E。
 
 == 2.1 通用工具链
 
 三平台的构建系统是同一套 CMake 工程，差别只在外层的驱动脚本和预编译库。
 所以先把平台无关的部分讲完。
 
-=== 2.1.1 你需要准备的六件东西
+=== 2.1.1 工具与最低版本
 
 #figure(
   kind: table,
@@ -68,7 +66,7 @@
     [`platform_apple_xcode.cmake:18-21`、\
      `:159-163`],
   ),
-  caption: [构建 Blender 需要的六件东西与编译器最低版本。Python 与 MSVC 两项各有陷阱，见下。],
+  caption: [构建 Blender 所需的通用工具与三平台编译器要求。],
 ) <tbl-toolchain>
 
 关于 Python，有一个必须澄清的常见误解：*预编译库里的 Python 与系统 Python
@@ -89,11 +87,10 @@
   `python not found, required for this operation`
   （#src("build_files/windows/update_sources.cmd:1-4")）。
 
-关于 MSVC，则有一个必须预先说明的问题：#win 上 `make.bat 2019` 这个开关仍然存在
-（#src("build_files/windows/parse_arguments.cmd:61-65")），但 Blender 5.2 的
-MSVC 实际门槛已经是 *VS2022 17.14.14*。用 VS2019 配置不会在 `make.bat` 阶段
-被拦下，而是在编译期以 `Compiler is unsupported` 失败
-（#src("build_files/cmake/platform/platform_win32.cmake:42-45")）。
+Blender 5.2 在 #win 上要求 *VS2022 17.14.14* 或更新版本。`make.bat` 仍保留较旧的
+Visual Studio 年份开关，但旧工具集最终会被 CMake 以 `Compiler is unsupported` 拒绝
+（#src("build_files/cmake/platform/platform_win32.cmake:42-45")）。因此不要根据开关名
+判断兼容性，应以当前源码中的编译器检查为准。
 
 === 2.1.2 CMake 必须懂的四件事
 
@@ -191,41 +188,21 @@ Blender 的构建脚本本质上就是在拼一条 `cmake` 命令。你会在三
 
 === 2.1.4 构建入口：POSIX 用 `make`，Windows 用 `make.bat`
 
-这是本章第一个必须纠正的旧习惯。Blender 源码根目录有三个入口：
+Blender 源码根目录有三个与构建直接相关的入口：
 `CMakeLists.txt`（CMake 工程本身）、`GNUmakefile`（POSIX 便捷入口）、
 `make.bat`（Windows 便捷入口）。
 
-`GNUmakefile` 只有 6 行就明确拒绝了 Windows：
+`GNUmakefile` 明确拒绝 Windows（#src("GNUmakefile:175-179")），Windows 平台配置也只接受
+MSVC（#src("build_files/cmake/platform/platform_win32.cmake:9-11")）。因此：
 
-```make
-# GNUmakefile:175-179
-# This makefile is not meant for Windows,
-# Note that a TAB indent prevents the message from showing, no indentation is intended.
-ifeq ($(OS),Windows_NT)
-$(error On Windows, use "cmd //c make.bat" instead of "make")
-endif
-```
-
-所以：
-
-- #win 上不要让 GNU Make 处理 `GNUmakefile`。在 MSYS2 / Git Bash 里使用
-  `cmd //c make.bat` 或 `./make.bat`；在 `cmd.exe` 里使用 `make.bat`；
-  在 PowerShell 里则要写 `./make.bat`。`cmd.exe` 按 `PATHEXT`
-  把命令名 `make` 解析成 `make.bat` 时也能工作，但显式写扩展名更不易混淆。
-- #mac #h(0.3em) #linux 上就用 `make`。这条 `make` 最终会调用 CMake 与
-  选定的后端（Ninja 或 Makefiles），并默认执行 `install` 目标
-  （#src("GNUmakefile:395-416")）。
-
-#pitfall[
-  网上大量 Blender 教程教你在 Windows 上装 MinGW / MSYS2 然后用 `make`。
-  这在 5.2 上是双重错误：（1）`GNUmakefile` 直接拒绝；
-  （2）Blender 的 Windows 平台文件里写死了 `if(NOT MSVC) message(FATAL_ERROR "Compiler is unsupported")`
-  （#src("build_files/cmake/platform/platform_win32.cmake:9-11")），
-  也就是说 GCC/MinGW 根本无法编译 Blender 本体。
-  MSYS2 在 Blender 里只有一个合法用途：*构建依赖库*时提供 `perl` 等工具，
-  而且是构建脚本自动下载的，源码注释里明确写着"这里不安装任何编译器"
-  （#src("build_files/build_environment/cmake/setup_msys2.cmake:7-11")）。
-]
+- #win 在 `cmd.exe` 中执行 `make.bat`，在 PowerShell 或 Git Bash 中执行
+  `./make.bat`。不要用 GNU Make、GCC 或 MinGW 构建 Blender 本体。#footnote[
+    Blender 构建依赖库时可能自动准备 MSYS2，用它提供 `perl` 等辅助工具；这不意味着
+    Blender 本体支持用 MinGW 编译，见
+    #src("build_files/build_environment/cmake/setup_msys2.cmake:7-11")。
+  ]
+- #mac #h(0.3em) #linux 执行 `make`。它会调用 CMake 和选定的后端，并默认完成
+  `install` 目标（#src("GNUmakefile:395-416")）。
 
 == 2.2 获取源码与依赖
 
@@ -264,8 +241,6 @@ Blender 官方仓库在 `projects.blender.org`。要拿到本书的核对基准�
   如果所在网络连接官方仓库不稳定，可以改用镜像；中国大陆网络环境通常值得优先尝试
   Gitee（码云）上的国内同步镜像。镜像地址、同步状态核验与 LFS 回退流程见附录 E.1.1。
 ]
-
-#pagebreak(weak: true)
 
 ==== 先理解 Git LFS：Git 里存指针，LFS 服务存实体
 
@@ -316,13 +291,13 @@ size 12345
 这种关系概括为“Git 仓库存指针，LFS 服务存内容”
 （#weblink("https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs.adoc", label: [git-lfs(1)])）。
 
-在本书固定的 Blender commit 中，主仓库当前版本共有 6,671 个 LFS 路径：
-
-- 6,311 个位于 `tests/files/`，是图像、模型、音视频等回归测试输入与期望结果；
-- 197 个位于 `release/datafiles/`，包括启动文件、预览文件、图标数据、ICC 配置和字体源文件；
-- 137 个位于 `release/windows/`，主要是 Windows 安装包与 MSIX 使用的图形资源；
-- 其余 26 个分布在 `assets/`、`release/darwin/`、`scripts/startup/` 和文档资源中，
-  包括内置画笔、节点资产与应用模板。
+书中核对的版本有 6,671 个 LFS 路径，其中绝大多数位于 `tests/files/`；
+`release/datafiles/`、`assets/` 等目录则包含启动文件、图标、画笔、色彩配置与应用模板。
+这些数字用于说明规模，不应被当作其他版本的固定清单。#footnote[
+  核对版本中，`tests/files/` 有 6,311 个 LFS 路径，`release/datafiles/` 有 197 个，
+  `release/windows/` 有 137 个，其余 26 个分布在 `assets/`、`release/darwin/`、
+  `scripts/startup/` 和文档资源中。升级版本后应重新执行 `git lfs ls-files` 统计。
+]
 
 这里还要把两个容易混淆的层次彻底分开：
 
@@ -387,92 +362,49 @@ POSIX 侧执行 `make update`（#src("GNUmakefile:617-618")），
 Python 脚本；只更新代码、不动预编译库则是 `make update_code`，
 对应 `make_update.py --no-libraries`（#src("GNUmakefile:620-621")）。
 
-脚本的主流程（#src("build_files/utils/make_update.py:667-729")）依次做四件事：
+脚本的主流程（#src("build_files/utils/make_update.py:667-729")）可以归纳为三步：
 
-1. *准备*：`git lfs install --skip-repo` 注册 LFS 过滤器但不在主仓库装钩子
-   （#src("build_files/utils/make_update.py:157-160")），把远端地址从
-   `projects.blender.org` 换成 `git.blender.org`
-   （#src("build_files/utils/make_update.py:163-177")），
-   并设置 LFS 回退远端 `lfs-fallback`，用于从镜像克隆但缺少 LFS 对象的情况
-   （#src("build_files/utils/make_update.py:639-664")）。
-2. *更新主仓库*：当前分支有上游就走 `fetch upstream` + `merge --ff-only`，
-   否则 `git pull --rebase`；最后对主仓库补一次 `git lfs pull`
-   （#src("build_files/utils/make_update.py:331-345")）。
-3. *启用本机的预编译库子模块*：`submodule_dir = f"lib/{platform}_{arch}"`
-   （#src("build_files/utils/make_update.py:227")），平台的取值被归一化成
-   `linux` / `macos` / `windows` 三种（#src("build_files/utils/make_update.py:91-108")）。
-4. *更新子模块*：逐个更新已启用的子模块，并对每个做一次 `git lfs pull`
-   （#src("build_files/utils/make_utils.py:238-273")）。
+1. 准备 Git LFS，并为镜像检出配置官方 LFS 回退来源；
+2. 在当前分支允许更新时同步主仓库，再补齐主仓库的 LFS 对象；
+3. 只启用当前平台的预编译库子模块，并补齐该子模块的 LFS 对象。
+
+具体使用哪条 `git fetch`、如何选择子模块路径，属于更新脚本的实现细节；排错时再到附录 E
+查对应命令即可。这里需要记住的边界是：`make update` 既处理源码更新，也处理构建所需的
+LFS 内容和平台库。
 
 #win 侧对应 `make.bat update` 与 `make.bat code_update`。前者依次执行
 「检查/下载预编译库 → 更新库子模块 → 运行 `make_update.py` 更新源码」，
 后者把中间一步跳过，只更新代码（#src("build_files/windows/parse_arguments.cmd:94-101")、
 #src("make.bat:82-98")）。
 
-顺带一个容易误读的细节：`make_update.py:673-679` 根据 Blender 版本算出的
-#raw(blender-branch) 用于选择匹配的外部库子模块分支，*不会强制切换 Blender
-主仓库本身*。主仓库只有在当前本地分支配置了上游时才会更新；处于固定标签的
-detached HEAD 时，脚本会跳过主仓库拉取，但仍会补齐主仓库 LFS 与平台库。
+`make update` 不会把固定标签的检出强行切回开发分支。处于 detached HEAD 时，脚本会跳过
+主仓库拉取，但仍会补齐主仓库 LFS 与平台库；脚本根据 Blender 版本计算出的分支名，
+主要用于选择匹配的外部库分支（#src("build_files/utils/make_update.py:673-679")）。
 
 ==== 下载中断后如何重试
 
-Git LFS 对象按内容寻址，已经完整落盘的对象不会因为再次执行 `git lfs pull` 而重下。
-因此网络中断后的正确动作是重复同一个更新命令，让它只补缺口，而不是删除整个源码目录从头开始：
+Git LFS 对象按内容寻址，已经完整落盘的对象不会因为再次执行 `git lfs pull` 而重新下载。
+因此网络中断后应重复更新命令补齐缺口，不要删除整个源码目录从头开始：
 
 ```bash
 $ git lfs pull
 $ git -C lib/<平台>_<架构> lfs pull
 ```
 
-使用 Blender 上游入口时，也可以重新执行 `make update`（#win 为 `make.bat update`）。
-在本书工程中，`init-blender` 会让每个联网步骤在失败后自动重试，默认最多再试 10 次、每次间隔 10 秒；网络状况特殊时可显式调整：
-
-```bash
-$ scons init-blender --retries=30 --retry-delay=20
-$ scons init-blender --retries=0  # 关闭重试，首次失败就退出
-```
-
-如果中断后 `git status` 突然把成百上千个 LFS 路径显示为已修改，不要立刻提交、还原或删除这些文件。
-先用 `git rev-parse --git-dir` 找到实际 Git 元数据目录，再检查其中是否残留 `index.lock`；子模块的 `.git` 可能是指向主仓库 `.git/modules/...` 的文本文件，不能凭路径猜测锁在哪里。
-只有在确认所有 Git / Git LFS 进程都已退出后，才可以删除这个残留的锁文件，然后重新执行 `git lfs pull` 与 `git status`。
-
-#tip[
-  *并发数不是越大越快。* 在同一台 Windows x64 机器、同一网络和本书固定的 #blender-display-version 检出上实测主仓库 LFS：默认 8 路约为 0.43 MiB/s，32 路约为 1.6 MiB/s，64 路约为 2.0 MiB/s。
-  从 32 提到 64 只增加约 25%，并且在这条网络路径上已经接近约 2 MiB/s 的上限；同时下载主仓库 LFS 与 `lib/` LFS 没有得到可辨认的总耗时收益。
-  这是一组 2026-10-23 的单机观测，不是 Blender 服务器的性能承诺；本书脚本取 32 作为速度与服务器压力的折中。
-  想在自己的网络上比较时，应使用相同 commit、分别准备干净检出，并记录 `git -c lfs.concurrenttransfers=<N> lfs pull` 的对象量与总时间，不要用已经有本地 LFS 缓存的第二次执行冒充对照实验。
+使用 Blender 官方入口时，也可以重新执行 `make update`（#win 为 `make.bat update`）。
+若中断后出现大量“已修改”文件或残留 `index.lock`，按附录 E.1.2 的顺序确认进程、修复索引，
+不要直接删除工作区。#footnote[
+  `lfs.concurrenttransfers` 不是越大越快。并发收益取决于网络路径和服务器限制；除非正在做
+ 可重复的网络测量，否则保持默认值比同时下载多组 LFS 对象更容易判断失败位置。
 ]
 
 === 2.2.4 版本差异：为什么现在是 Git LFS 而不是 SVN
 
-如果你读的是 2019 年前后的 Blender 构建教程，多半会看到这样的说法：
-"Windows 上用 `make.bat update` 会自动用 SVN 检出预编译库"、
-"Linux 上需要装 `subversion`"。
-
-这套机制在新版本里已经被彻底替换：
-
-- 预编译库从 SVN 目录改成了*独立的 Git 仓库 + Git LFS*，
-  也就是上一节那四个子模块。
-- 因此 `subversion` / `svn` 不再是构建 Blender 的必要依赖。
-  你只要 Git 与 Git LFS。
-- 主仓库自身的 LFS 用 `filter=lfs` 规则管理了上百种二进制扩展名 ——
-  `.blend`、`.png`、`.exr`、`.ttf`、`.dll`、`.so`、`.dylib`、`.zip`、
-  `.fbx`、`.usd` 等等，完整清单见 #src(".gitattributes:1-111")。
-
-在源码里还能看到历史的痕迹，但已经不起作用：
-
-- #win 的 `make.bat` 里仍有 `BUILD_UPDATE_SVN`、`lib_update.cmd`、
-  `svn_update.cmd`、`svn_fix.cmd` 这些名字（#src("build_files/windows/lib_update.cmd:1-23")），
-  而 `lib_update.cmd` 的内容已经完全是 `git submodule` 与
-  `git config --local submodule...`。变量名是遗留的，行为不是。
-- `make_update.py` 里 `--use-tests`、`--no-submodules`、
-  `--use-linux-libraries` 三个参数被保留下来只为兼容旧脚本，
-  运行时只会打印一句"这是废弃参数"（#src("build_files/utils/make_update.py:75-78")、
-  #src("build_files/utils/make_update.py:710-720")）。
-
-判断一篇 Blender 构建教程是否过期，最快的办法是看它有没有出现 "SVN"、
-"`lib/macos_x64`"、"`make update` 需要 svn" 这类说法 ——
-出现任何一个，就说明它至少落后了五个大版本。
+较早的教程会要求安装 SVN，用它检出预编译库；当前版本已改为“Git 子模块 + Git LFS”，
+因此构建 Blender 不再需要 `svn`。源码里仍能看到 `BUILD_UPDATE_SVN`、`svn_update.cmd`
+等历史名称，但对应脚本执行的已经是 `git submodule` 与 Git LFS 操作
+（#src("build_files/windows/lib_update.cmd:1-23")）。判断流程时应看脚本行为，而不是根据
+遗留文件名推断。
 
 === 2.2.5 主仓库自己的 LFS：测试数据为主，也包含构建资源
 
@@ -500,7 +432,7 @@ Detected incomplete startup blend, likely due to missing Git LFS checkout.
 Running "make update" or "git lfs pull" may resolve the issue.
 ```
 
-看到这条报错时，不要去找编译器或 SDK 的问题 —— 它 100% 是 LFS 没拉全。
+看到这条报错时，优先检查 Git LFS，而不是编译器或 SDK。
 
 但 `startup.blend` 只是 CMake 选择的一枚哨兵，不是“LFS 已完整”的证明。
 固定基准里还有画笔资源、图标数据、预览文件与 `release/datafiles/colormanagement/icc/` 下的 ICC 配置由 LFS 管理；只要 `startup.blend` 已恢复，其他路径仍是指针时 configure 也可能通过，最后得到的程序却缺资源或在运行、测试阶段才报错。
@@ -517,17 +449,13 @@ OID 后面的 `*` 表示工作树中是完整对象，`-` 表示仍是 LFS 指�
 需要人工确认可疑文件时，LFS 指针通常只有一百多字节，并以本节前面展示的三行格式开头。
 体积很小和 `version https://git-lfs.github.com/spec/v1` 文件头要同时看，因为“小文件”
 本身不一定是指针。
-预编译库子模块也要在自己的仓库目录执行同样的 `git lfs ls-files` 检查，不能只核对主仓库。
-在本书工程里，下面的只读检查会遍历主仓库和当前平台库的全部 LFS 路径，不下载或修改文件：
+预编译库子模块也要在自己的目录执行同样的 `git lfs ls-files` 检查，不能只核对主仓库。
 
-```bash
-$ scons init-blender --check-only
-```
-
-本节可以压成一句话：*`git clone` 先取得 Git 历史与 LFS 指针；已安装 Git LFS 时，
-checkout 通常会自动还原实体文件，`make update`（#win 是 `make.bat update`）则负责确保
-主仓库 LFS 与本机平台库都已补齐；开始配置前还要按 LFS 清单全量核对。*
-库目录缺失会表现为 `Unable to find LIBDIR`（#linux）或 `Mac OSX requires pre-compiled libs`（#mac），`startup.blend` 未恢复会触发三平台通用的 `Detected incomplete startup blend`，其余 LFS 缺口则未必能在配置阶段被发现。
+本节可以压成一句话：*`git clone` 取得 Git 历史与 LFS 指针；`make update`
+（#win 是 `make.bat update`）补齐主仓库 LFS 与本机平台库；开始配置前，再按 LFS 清单
+确认工作区里没有残留指针。* 库目录缺失会表现为 `Unable to find LIBDIR`（#linux）或
+`Mac OSX requires pre-compiled libs`（#mac）；`startup.blend` 未恢复会触发三平台通用的
+`Detected incomplete startup blend`，其他 LFS 缺口则未必能在配置阶段被发现。
 
 == 2.3 Windows 构建
 
@@ -535,10 +463,8 @@ checkout 通常会自动还原实体文件，`make update`（#win 是 `make.bat 
 
 #figure(fig-build-flow(), caption: [三平台构建流程对照（五阶段 × 三平台）]) <fig-build-flow>
 
-注意图中 Windows 那一行画的是*带 `ninja` 开关*的路径：`make.bat`
-*默认不用 Ninja，而是用 MSBuild + Visual Studio 生成器*
-（#src("make.bat:137-149")）。要得到图中那条路径必须显式写 `make.bat ninja`，
-2.3.3 节会把两条路径都讲清楚。
+图中 Windows 一行采用推荐的 `make.bat ninja` 路径。若不加 `ninja`，`make.bat` 会使用
+Visual Studio 生成器和 MSBuild（#src("make.bat:137-149")）；两种路径的区别见 §2.3.3。
 
 === 2.3.1 前置条件
 
@@ -571,7 +497,7 @@ checkout 通常会自动还原实体文件，`make update`（#win 是 `make.bat 
 
 === 2.3.2 从零到构建成功
 
-假设你已经把源码放在一个*路径里没有空格*的位置（见 2.3.5 第一个易错点）。
+假设你已经把源码放在一个*路径里没有空格*的位置（见 §2.3.4）。
 
 ```cmd
 :: 1. 进入源码目录
@@ -584,19 +510,19 @@ checkout 通常会自动还原实体文件，`make update`（#win 是 `make.bat 
 > make.bat ninja lite
 
 :: 4. 确认能启动
-> build_windows_Lite_x64_vc17_Release\bin\blender.exe --version
+> ..\build_windows_Lite_x64_vc17_Release\bin\blender.exe --version
 
 :: 5. 日常构建：改用默认配置（Release，但套用默认 CMake 选项）
 > make.bat ninja
 
-:: 6. 调试构建
-> make.bat ninja debug
+:: 6. C++ 开发与调试构建
+> make.bat ninja debug developer
 ```
 
 第 3 步之所以建议先使用 `lite`，是因为它关掉了大量可选组件
 （#src("build_files/cmake/config/blender_lite.cmake:12-86")：
 USD、Alembic、Cycles、OpenVDB、Draco、FFmpeg 编解码等统统关掉），
-首次编译时间能明显缩短，而且能在你投入几小时之前先确认工具链是通的。
+首次构建时间能明显缩短，而且能在你投入几小时之前先确认工具链是通的。
 
 第 4 步的路径需要解释：`make.bat lite` 会设置 `TARGET=Lite`
 （#src("build_files/windows/parse_arguments.cmd:32-34")），
@@ -624,84 +550,29 @@ make.bat ninja bpy             -> ..\build_windows_Bpy_x64_vc17_Release
 这不算问题（`-C` 里的变量带 `FORCE`，会覆盖缓存），但要知道
 它不会给你一个独立的目录。
 
-=== 2.3.3 `make.bat` 的开关
+=== 2.3.3 选择生成器与构建档位
 
-开关的解析全在 #src("build_files/windows/parse_arguments.cmd:1-138")，
-`make.bat help` 会打印一份面向用户的摘要（#src("build_files/windows/show_help.cmd:1-47")）。
-按用途分组如下。
+`make.bat` 默认生成 Visual Studio 工程并用 MSBuild 构建；加上 `ninja` 后改用 Ninja。
+前者适合在 Visual Studio 中浏览和调试工程，后者通常有更快的增量构建速度。无论选择哪种
+生成器，`debug` 都表示 Debug 构建类型，`lite`、`developer`、`full` 等则是功能档位；
+二者可以组合，具体区别见 §2.6.3。
 
-#figure(
-  kind: table,
-  table(
-    columns: (auto, 2.6fr),
-    inset: 5.5pt,
-    align: (left, left),
-    stroke: 0.4pt + luma(78%),
-    table.header([*开关*], [*作用*]),
-    [`full` / `release` / `lite` / \
-     `headless` / `cycles` / `bpy` / `developer`],
-    [构建档位：分别加载 `build_files/cmake/config/` 下一份独立的初始缓存文件。
-      七份文件的真实名字与逐项差别见 §2.6.3。*只有 `developer` 不改变构建目录名*。],
-    [`debug`],
-    [构建类型设为 `Debug`（默认是 `Release`），构建目录加 `_Debug` 后缀],
-    [`ninja`],
-    [用 Ninja 取代默认的 MSBuild + Visual Studio 生成器],
-    [`sccache`],
-    [启用 sccache 编译缓存。*只支持 Ninja*（#src("build_files/windows/configure_msbuild.cmd:5-8")）],
-    [`clean` / `nobuild` / `nobuildinfo`],
-    [构建前清理 / 只配置不编译 / 关闭构建信息（`-DWITH_BUILDINFO=OFF`）],
-    [`builddir <路径>`],
-    [覆盖构建目录。带盘符视为绝对路径，否则相对源码上一级],
-    [`with_tests` / `with_gpu_tests` / `test`],
-    [配置时打开 GTest 单元测试 / 打开 GPU 三套测试 / 直接运行测试（`test` 隐含 `nobuild`）],
-    [`x64` / `arm64` / `x86`],
-    [指定目标架构。`x86` 仍然存在，但会直接报错"32 位构建已不再支持"（#src("build_files/windows/parse_arguments.cmd:54-56")）],
-    [`2019` / `2022` / `2026`],
-    [指定 VS 年份；`b` 后缀用 Build Tools 版，`pre` / `i` 用预览版],
-    [`clang` / `msvc`],
-    [用 clang-cl 编译（arm64 上默认开启）/ 在 arm64 上强制 MSVC（不受支持）],
-    [`asan` / `pydebug`],
-    [打开地址消毒器（`-DWITH_COMPILER_ASAN=On`）/ 调试用 Python（`-DWINDOWS_PYTHON_DEBUG=On`）],
-    [`update` / `code_update`],
-    [更新源码 + 子模块 + 预编译库 / 只更新代码（等价于 `--no-libraries`）],
-    [`format` / `license` / `icons_geom` / \
-     `doc_py` / `showhash` / `packagename <名>`],
-    [不构建的辅助动作：格式化代码、汇总许可证、更新几何图标、
-      生成 Python 文档、只显示提交号、覆盖 CPack 包名],
-    [`verbose` / `help`],
-    [打印详细诊断信息（排查环境检测失败时第一个该加的开关）/ 打印帮助],
-  ),
-  caption: [`make.bat` 开关分组一览（来源：`build_files/windows/parse_arguments.cmd`）。逐项的行号对应见附录 C。],
-) <tbl-makebat>
-
-构建档位对应的 `-C` 文件是三平台共用的，本机核对到的真实文件名恰好是七个：
-`blender_full.cmake`、`blender_release.cmake`、`blender_lite.cmake`、
-`blender_headless.cmake`、`blender_developer.cmake`、`bpy_module.cmake`、
-`cycles_standalone.cmake`。POSIX 侧 `GNUmakefile` 加载的是同一批文件
-（#src("GNUmakefile:284-320")）。
-
-=== 2.3.4 常用组合
-
-下面五个组合覆盖了绝大多数日常场景，全部在
-#src("build_files/windows/parse_arguments.cmd") 里核实过，顺序也是推荐的顺序。
+日常只需记住下面五个组合。其余开关不应打断第一次构建，完整列表见附录 C.2。
 
 - `make.bat update` —— *新克隆之后的第一步，必须在第一次构建之前完成。*
   它会先问你要不要下载预编译库（答 `y`），再更新子模块与源码。
 - `make.bat ninja lite` —— *这是第一次构建。* 关掉可选组件，最快拿到一个能启动的
   Blender，用来验证工具链是否通了。
 - `make.bat ninja` —— *这是日常 Release 构建。* 套用默认 CMake 选项，用 Ninja 后端。
-- `make.bat ninja debug` —— *这是日常调试构建。* 构建目录独立（`_Debug` 后缀），
-  可以和 Release 构建共存，断点调试时用它。
-- `make.bat ninja developer` —— *改 Blender C++ 源码时推荐。*
+- `make.bat ninja debug developer` —— *这是日常 C++ 开发与调试构建。*
+  Debug 构建目录可以和 Release 构建共存；`developer` 档位还会
   打开 `WITH_ASSERT_ABORT`、`WITH_GTESTS`、`WITH_PYTHON_SAFETY`，
   非 Windows 上还会打开 ASAN，并生成 `compile_commands.json`
   （#src("build_files/cmake/config/blender_developer.cmake:11-30")）。
 
-另外三个在特定场合很有用：`make.bat nobuild` 只重新生成构建系统而不编译
-（改完 CMake 选项后检查配置是否通过）；`make.bat ninja clean` 在构建前清理
-（等价于在缓存里加上 `MUST_CLEAN=1` 后重新执行，
-见 #src("build_files/windows/configure_ninja.cmd:36-40")）；
-`make.bat builddir <路径>` 完全指定构建目录。
+`make.bat nobuild` 可以只生成或重新配置工程，`make.bat builddir <路径>` 可以指定构建目录；
+这两个命令适合已经理解 CMake 缓存的读者。不要把 `clean` 当成日常步骤，只有在确认缓存或
+中间产物已经损坏时才清理。
 
 #tip[
   首次构建成功后，构建目录里会生成一个 `rebuild.cmd`
@@ -712,38 +583,27 @@ make.bat ninja bpy             -> ..\build_windows_Bpy_x64_vc17_Release
   *日常增量重建直接运行它最快*，因为它省掉了 `make.bat` 的一整套环境探测。
 ]
 
-=== 2.3.5 常见问题
+=== 2.3.4 Windows 构建排错
 
-#win 上容易出错的地方比另外两个平台多，以下六条覆盖了绝大多数"卡住"的场景。
+#win 上最常见的问题集中在路径、工具探测和依赖完整性；更完整的诊断顺序见附录 E.2。
 
 - *源码路径不能含空格。* `make.bat` 的第三件事就是检查这件事，发现空格就打印
   `There are spaces detected in the build path "...", this is currently not supported, exiting....`
   然后退出（#src("build_files/windows/check_spaces_in_path.cmd:1-6")）。
   它检查的是*源码目录*，所以在 `C:\Users\你的名字\...` 这类路径下经常直接踩中；
   把源码放在 `C:\dev\blender` 这种路径下最省事。
-- *"Windows 上也能用 GNU Make 驱动 Blender 构建" 是错的。* 见 2.1.4 与本节开头。
-  `GNUmakefile:177-179` 在 `OS` 为 `Windows_NT` 时直接报错，
-  原文就是 `On Windows, use "cmd //c make.bat" instead of "make"`。
-  另外，即便在 MSYS2 里用 GCC 编译 Blender 本体也是被
-  `platform_win32.cmake:9-11` 明确拒绝的。
 - *Ninja 不在 `PATH` 里。* 报错原文 `"Ninja not detected in the path"`
   （#src("build_files/windows/configure_ninja.cmd:1-5")）。它是用
   `ninja --version` 探测的，所以"装了但没加进 `PATH`"与"没装"是同一个症状。
-- *没加 `ninja` 却指定了 `sccache`。* `configure_msbuild.cmd` 直接拒绝，
-  原文是 `sccache is only supported with ninja as the build system.`
-  （#src("build_files/windows/configure_msbuild.cmd:5-8")）。想用就加 `ninja`。
 - *预编译库没下载完，或者你中断了它。* 症状会在配置阶段出现：CMake 报找不到
   `LIBDIR`。而 `check_libraries.cmd` 的判定标准很朴素 —— 它只看
   `lib\windows_x64\.git` 是否存在（#src("build_files/windows/check_libraries.cmd:10")）。
   也就是说*一个残缺的 `.git` 目录会被当成"库已就绪"*，于是它不再询问、
   直接进入配置，然后在 CMake 里失败。遇到这种情况，最干净的做法是删掉
   `lib\windows_x64` 整个目录，重新执行 `make.bat update`，并等待它彻底完成。
-- *构建目录命名不符合预期。* 命名规则见 2.3.2。最常见的两个困惑：
-  "为什么加了 `developer` 却没生成新目录"（它不设置 `TARGET`），
-  以及"为什么 `lite` 的名字里 `Lite` 排到了架构前面"
-  （拼串顺序是 `<基名>_<TARGET>_<架构>_vc<版本>_<类型>`，
-  见 #src("build_files/windows/set_build_dir.cmd:1-2")）。
-  想完全控制目录名就用 `make.bat builddir <路径>`。
+- *构建目录命名不符合预期。* `developer` 不设置独立的 `TARGET`，因此它与默认配置
+  共用目录；`lite` 等档位则会进入目录名。想完全控制位置就使用
+  `make.bat builddir <路径>`。
 
 #pitfall[
   *VS 版本选错或组件不全。* 三种症状各不相同：
@@ -969,13 +829,13 @@ Linux 默认是*便携安装*：`WITH_INSTALL_PORTABLE` 默认 `ON`
 - 动态库：与主程序同级的 `lib/`，通过 RPATH 里的 `$ORIGIN/lib` 定位
   （#src("build_files/cmake/platform/platform_unix.cmake:1093-1102")）。
   这意味着*把整个 `bin/` 目录搬到另一台机器上仍然能运行*，
-  前提是目标机的 glibc 版本足够新（见 2.5.4 常见问题）。
+  前提是目标机的 glibc 版本足够新（见 §2.5.4）。
 - 测试程序的相对路径略有不同，源码里明确区分了
   `Blender.app`（#mac）/ `<版本号>`（#win 或便携安装）/
   `share/blender/<版本号>`（非便携 #linux）
   这三种情况（#src("build_files/cmake/testing.cmake:139-149")）。
 
-=== 2.5.4 常见问题
+=== 2.5.4 Linux 构建排错
 
 #pitfall[
   *忘了 `make update`，然后被一堆找不到库的报错淹没。*
@@ -1017,43 +877,25 @@ Unable to find LIBDIR: "<...>". system libraries may be used
 
 === 2.5.5 可选：`make deps` 自行编译依赖
 
-如果预编译库在你的发行版上不可用（例如 glibc 太老，
-或者你要用系统库而不是预编译库），可以自己编译全部依赖：
+如果官方预编译库确实不适用，可以自行编译全部依赖：
 
 ```bash
 $ make deps
 ```
 
-这会用 `build_files/build_environment/` 下那套独立的 CMake 工程编译依赖，
-安装到 `lib/<平台>_<架构>/`（#src("GNUmakefile:431-451")）。
-
-#warn[
-  源码对这个目标的定位说得很直白：*"intended only for platform maintainers"*，
-  而且它会把结果安装在 `lib/` 里，从而*覆盖预编译库*；
-  `HELP_TEXT` 里紧接着提醒"要回到预编译库，必须手动从 `lib/` 里删掉它们"
-  （#src("GNUmakefile:35-38")）。同一条说明在依赖工程自己的
-  `CMakeLists.txt` 里也有：
-
-```text
-# build_files/build_environment/CMakeLists.txt:7-13
-# This is a build system used by platform maintainers to build library dependencies.
-# For users building Blender, we recommend using the pre-compiled libraries from `lib/`
-# on all platforms.
-```
-
-  换句话说，`make deps` 是一把有点重的锤子。日常开发用不到它。
+该目标面向平台维护者，会把结果写入 `lib/<平台>_<架构>/`，并可能覆盖已经下载的
+预编译库（#src("GNUmakefile:35-38")、#src("GNUmakefile:431-451")）。因此它不是标准构建的
+备用“修复按钮”：普通开发者应优先解决 `make update` 或平台库下载问题。#footnote[
+  #win 对应的底层入口是
+  `build_files/build_environment/windows/build_deps.cmd`；只有维护依赖工具链时才需要直接
+  使用它，常规 Blender 构建仍应走 `make.bat`。
 ]
 
-#win 上对应的入口是 `build_files/build_environment/windows/build_deps.cmd`，
-用法是 `build_deps 2022 x64`（#src("build_files/build_environment/windows/build_deps.cmd:26-29")）。
-它同样要求 MSBuild 与 CMake 在 `PATH` 里，并且*要求 `PATH` 中没有
-`pythonw.exe`*，否则直接退出（#src("build_files/build_environment/windows/build_deps.cmd:73-83")）。
+== 2.6 首次构建、增量构建与常用档位
 
-== 2.6 首次编译、增量编译与常用 `make` 目标
+=== 2.6.1 首次构建：会花多久，卡在哪
 
-=== 2.6.1 首次编译：会花多久，卡在哪
-
-首次构建时间长，原因不是 Blender 本身，而是*依赖与生成步骤*：
+首次构建耗时长，不只因为 C/C++ 文件多，还因为链接和生成步骤也要完整执行：
 
 - `intern/`、`extern/` 下的第三方库全部要从源码或预编译静态库参与链接。
 - RNA 相关的生成步骤（`makesdna`、`makesrna`）要先执行一遍，
@@ -1063,11 +905,11 @@ $ make deps
 所以首次构建可能需要半小时到几小时，而第二次改一个 `.cc` 文件通常只需要几十秒到几分钟。
 这个落差是正常的，不表示构建系统损坏。
 
-先判断中断发生在哪个阶段：源码、LFS 或预编译库下载失败时，重复 §2.2.3 的更新命令即可，不要删除构建目录；真正进入编译后被中断，则直接重新执行同一条 `make`、`make.bat`、Ninja 或 MSBuild 命令。
-构建后端会复用已经成功生成的目标，只继续未完成或受影响的部分。
-在本书工程里，这两层职责分别是可重试的 `scons init-blender` 和可重复执行的 `scons build-blender`。
+中断后先判断所处阶段：源码、LFS 或预编译库下载失败时，重复 §2.2.3 的更新命令；
+已经进入构建阶段，则重新执行同一条 `make`、`make.bat`、Ninja 或 MSBuild 命令。
+构建后端会复用已经完成的目标，不需要删除源码或构建目录重新开始。
 
-=== 2.6.2 增量编译
+=== 2.6.2 增量构建
 
 POSIX 上最简单的增量构建就是再次执行：
 
@@ -1114,7 +956,8 @@ $ ninja -C ../build_linux install
 开发者档位"，而且因为 `debug` 会给构建目录加 `_debug` 后缀，
 它会和你的 Release 构建完全隔离。
 
-下面这张表是本章的核心，也是日常最需要记住的一张。
+下面这张表用于选择档位。第一次验证工具链优先用 `lite`，开始修改 C++ 后再切到
+`debug developer`；其余档位只在目标明确时使用。
 
 #figure(
   kind: table,
@@ -1191,13 +1034,10 @@ $ ninja -C ../build_linux install
   Ninja 给你最快的增量编译。三者互不冲突。
 ]
 
-=== 2.6.4 其他值得记住的目标
+=== 2.6.4 测试、配置与维护目标
 
-`GNUmakefile` 里的目标远不止上面的构建档位。日常最常用的还有：
+构建主线之外，日常偶尔会用到下面几类目标：
 
-- `make ninja`：把后端换成 Ninja（#src("GNUmakefile:325-328")）。
-- `make ccache`：打开 ccache（`-DWITH_COMPILER_CCACHE=YES`，
-  见 #src("GNUmakefile:318-320")）。
 - `make test`：运行测试套件。它的实现是调用
   `build_files/utils/make_test.py`，而后者转手执行
   `ctest . --output-on-failure -O <构建目录>/tests/log.txt`
@@ -1208,16 +1048,11 @@ $ ninja -C ../build_linux install
 - `make help` / `make help_features`：前者打印目标说明，
   后者列出所有可选功能开关（#src("GNUmakefile:462-463")、
   #src("GNUmakefile:667")）。
-- `make package_archive`：打包成归档，产物在 `<构建目录>/release`
-  （#src("GNUmakefile:469-471")）。
-- `make format` / `make license`：格式化与许可证检查
-  （#src("GNUmakefile:623-628")）。提交代码前通常要执行一次 `make format`。
+- `make format` / `make license`：提交前执行格式化与许可证检查
+  （#src("GNUmakefile:623-628")）。
 
-还有一整组 `check_*` 静态检查目标（`check_cppcheck`、`check_mypy`、
-`check_pep8`、四种拼写检查、`check_struct_comments`、`check_size_comments`、
-`check_descriptions`、`check_deprecated`、`check_licenses`、`check_cmake`、
-`check_clang_array`、`check_docs_file_structure`），
-它们的完整清单与用途见附录 C。
+打包、文档生成和 `check_*` 静态检查属于发布或专项维护流程，不必在第一次构建时掌握；
+需要时查附录 C 的目标表即可。
 
 == 2.7 运行与调试
 
@@ -1388,122 +1223,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS     ON  CACHE BOOL "" FORCE)
   把这个文件路径告诉你的编辑器即可。官方也有一页专门讲 VSCode 配置：
   #weblink("https://developer.blender.org/docs/handbook/development_environments/vscode/", label: [Visual Studio Code])。
 
-== 2.8 三平台差异对照表
+== 2.8 下一步：把构建变成日常工作流
 
-把本章所有平台相关的差异压进一张表，供日常查阅。
-
-#figure(
-  kind: table,
-  table(
-    columns: (0.95fr, 1.35fr, 1.3fr, 1.3fr),
-    inset: 5pt,
-    align: (left, left, left, left),
-    stroke: 0.4pt + luma(78%),
-    table.header([*项目*], [#win], [#mac], [#linux]),
-
-    [构建入口],
-    [`make.bat`（`make` 会被显式拒绝，\
-     见 `GNUmakefile:177-179`）],
-    [`make`],
-    [`make`],
-
-    [克隆],
-    [`git clone https://projects.blender.org/blender/blender.git`\
-     （三平台相同，不需要 `--recurse-submodules`）],
-    [同左],
-    [同左],
-
-    [更新依赖与源码],
-    [`make.bat update`\
-     只更新代码：`make.bat code_update`],
-    [`make update`\
-     只更新代码：`make update_code`],
-    [同 #mac],
-
-    [预编译库子模块],
-    [`lib/windows_x64`（x64）\
-     `lib/windows_arm64`（arm64）],
-    [`lib/macos_arm64`\
-     （*没有* `macos_x64`）],
-    [`lib/linux_x64`],
-
-    [默认构建目录],
-    [源码上一级 `..\build_windows`，\
-     最终名形如\
-     `build_windows_x64_vc17_Release`],
-    [源码上一级 `../build_darwin`\
-     （加档位后形如 `build_darwin_lite`）],
-    [源码上一级 `../build_linux`\
-     （加档位后形如 `build_linux_lite`）],
-
-    [配置与默认生成器],
-    [`make.bat [开关…]`，内部执行\
-     `cmake -G … -H<源码> -B<构建>`；\
-     默认 MSBuild + Visual Studio 生成器，\
-     加 `ninja` 开关改为 Ninja],
-    [`make [目标…]`，内部执行 `cmake`；\
-     默认 Unix Makefiles，\
-     加 `ninja` 目标改为 Ninja],
-    [同 #mac],
-
-    [构建与增量捷径],
-    [`ninja install`，或\
-     `msbuild … /target:build` + `INSTALL.vcxproj`；\
-     后续重建用构建目录里的 `rebuild.cmd`],
-    [后端 `install` 目标（`make` 自动完成）；\
-     后续重建直接 `make` 或\
-     `ninja -C <构建目录> install`],
-    [同 #mac],
-
-    [产物路径],
-    [`<构建目录>\bin\blender.exe`（Ninja）\
-     `<构建目录>\bin\Release\blender.exe`（MSBuild）；\
-     同级 `blender.shared\` 放 DLL],
-    [`<构建目录>/bin/Blender.app`，\
-     可执行文件在 `Contents/MacOS/Blender`],
-    [`<构建目录>/bin/blender`，\
-     同级 `lib/` 由 RPATH 的 `$ORIGIN/lib` 定位],
-
-    [编译器与系统依赖],
-    [本书使用 MSVC（VS2022 17.14.14+）；\
-     上游另有 clang-cl 路径，但不属于本书验证流程；\
-     需要「使用 C++ 的桌面开发」工作负载。\
-     *`make.bat` 会自动 `vcvarsall`*，不必手动开开发者命令行],
-    [Apple clang，需要 Xcode / CLT 16.0+；\
-     Blender 第三方库不需要由 Homebrew 提供],
-    [GCC 14+ / Clang 17+；\
-     需要 X11 / Wayland 开发包，\
-     可用 `install_linux_packages.py` 安装],
-
-    [常用调试命令],
-    [`blender.exe -b -X --python s.py`\
-     （或 Visual Studio 调试器）],
-    [`./Blender.app/Contents/MacOS/Blender -b -X …`\
-     （lldb）],
-    [`./bin/blender -b -X …`\
-     （gdb / lldb）],
-
-    [调试器打印器与 IDE 工程],
-    [`tools/utils_ide/natvis/Blender.natvis`；\
-     VS 生成器直接产出 `Blender.sln` / `.slnx`],
-    [`tools/debug/lldb/blender_lldb_formatter.py`；\
-     `-G Xcode`、`make project_qtcreator`],
-    [`tools/debug/gdb/blender_gdb_extension.py`；\
-     `make project_qtcreator` / `project_eclipse`；\
-     VSCode 用 `compile_commands.json`],
-
-    [最需要注意的易错点],
-    [路径不能含空格；\
-     下载中断后须重试并全量核对 LFS；\
-     `sccache` 只支持 Ninja],
-    [Intel Mac 无预编译库；\
-     构建目录叫 `darwin` 不叫 `macos`],
-    [忘 `make update` 不会立刻报错，\
-     而是静默改用系统库；\
-     产物受 glibc 版本限制],
-  ),
-  caption: [三平台构建与调试差异一览。所有条目都在本书采用的 Blender 源码版本中核对过，行号见正文。],
-) <tbl-platform-summary>
+完成一次构建后，不必继续记忆平台表格。日常工作只需要保留三条稳定路径：依赖或版本变化时
+重新执行更新命令；修改 C++ 后对既有构建目录做增量构建；需要断点调试时使用独立的
+`debug developer` 构建。三平台的命令、目录和产物位置已经集中在附录 D，遇到错误再按附录 E 的症状
+索引排查。
 
 #summary[
   这一章的要点可以压缩成五句话：

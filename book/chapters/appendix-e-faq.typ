@@ -1,9 +1,9 @@
 #import "../common.typ": *
 
-= 附录 E 常见问题
+= 附录 E Blender 构建与开发排错
 
-本附录收集实际开发中最容易卡住的问题。凡是本书核对基准版本上验证过的现象，
-都会给出可直接执行的诊断或修复命令；凡是属于经验性建议的，会明确写成建议。
+本附录按症状整理源码获取、构建、运行与开发中的高频故障。每一节先给判断依据，再给
+可执行的处理步骤；经验性建议会与源码能够确认的事实分开表述。
 
 == E.1 源码获取与依赖
 
@@ -82,20 +82,12 @@ https://projects.blender.org/blender/blender.git
 ]
 
 如果 `git cat-file` 失败，说明镜像尚未包含本书基准，不要用分支顶端的另一个 commit
-替代。本书工程也可以自动完成探测、克隆、LFS 回退与完整性检查：
+替代。镜像只负责提供 Git 对象；平台预编译库与缺失的 Git LFS 对象仍应从
+`projects.blender.org` 获取。
 
-```bash
-$ scons init-blender --mirror=github
-$ scons init-blender --mirror=gitee
-$ scons init-blender --mirror-url=https://git.example.com/blender.git
-```
+=== E.1.2 克隆中断后，索引或锁文件异常
 
-`--mirror` 只改变新克隆的主仓库来源；平台预编译库与 Git LFS 数据仍来自
-`projects.blender.org`，已有的 `blender/` 检出也不会被悄悄更换远端。
-
-=== E.1.2 克隆到一半被中断，之后 git 好像坏了
-
-这是本书编写过程中真实遇到的情况，症状很有辨识度：
+这类中断的症状很有辨识度：
 
 - `git ls-files` *没有任何输出*（索引为空），
 - `git status` 把成千上万个文件显示为已删除（`D`），
@@ -108,7 +100,7 @@ $ scons init-blender --mirror-url=https://git.example.com/blender.git
   不要急着重新克隆。先按下面的顺序处理，通常几分钟就能恢复，省下几 GB 的重复下载。
 ]
 
-```bash
+```powershell
 # 1) 确认没有活跃的 git / git-lfs 进程（有的话先等它结束，或确认是残留后再终止）
 $ Get-Process git,git-lfs -ErrorAction SilentlyContinue
 
@@ -184,23 +176,30 @@ Windows 平台的库在 3 GB 量级，且大文件（例如 LLVM）传输很慢�
   E.1.2 那种索引与锁文件的残留状态，反而更费时间。
 ]
 
-验证库是否真的就绪，最可靠的方式是抽查几个关键依赖是否存在*实体文件*
-（而不是几行文本的 LFS 指针）：
+验证库是否真的就绪，应先检查该子模块列出的全部 LFS 路径：
 
 ```bash
+$ git -C lib/<平台>_<架构> lfs ls-files
+```
+
+OID 后面不应出现表示工作区仍为指针的 `-`。若需要进一步检查可疑路径，再读取文件头；
+实体二进制文件不应显示 LFS 指针文本：
+
+```powershell
 # LFS 指针文件的第一行形如：version https://git-lfs.github.com/spec/v1
-$ Get-Content lib\windows_x64\python\...\python.exe -TotalCount 1
+$ Get-Content <可疑文件> -TotalCount 1
 ```
 
 如果第一行是 LFS 指针而不是二进制内容，说明该文件还没被还原。
 
 === E.1.6 构建时报「找不到外部库」
 
-按顺序检查三件事：
+按顺序检查四件事：
 
 1. 库目录是否存在且非空：`lib/windows_x64`（Windows x64）等；
 2. 该目录下是否有子模块的 `.git` 标记（Windows 构建脚本正是用它判断库是否就绪的）；
-3. 平台与架构是否匹配（例如 arm64 机器却只下了 `windows_x64`）。
+3. `git -C lib/<平台>_<架构> lfs ls-files` 是否仍有 `-` 记录；
+4. 平台与架构是否匹配（例如 arm64 机器却只下了 `windows_x64`）。
 
 == E.2 构建
 
@@ -240,7 +239,10 @@ CMake 把缓存写在构建目录里，改选项后必须让它重新配置。�
 - 编译缓存能显著缩短重复构建时间：`make.bat ninja sccache`（#win）与 `make ccache`（#mac #linux）。
 - 只改了几个文件时，让构建系统自己决定要重编什么，不要动辄 `clean`。
 
-=== E.2.4 Release、Debug、developer、lite 怎么选
+=== E.2.4 构建类型与构建档位怎么选
+
+`Release` / `Debug` 是*构建类型*，控制优化与调试符号；`lite` / `developer` / `full`
+是*构建档位*，控制启用哪些功能。两类开关可以组合，例如 `debug developer`。
 
 #figure(
   kind: table,
@@ -249,21 +251,21 @@ CMake 把缓存写在构建目录里，改选项后必须让它重新配置。�
     inset: 6pt,
     align: (left, left),
     stroke: 0.4pt + luma(78%),
-    table.header([*构建*], [*适用场景*]),
-    [`Release`（默认）], [日常使用、执行测试、截图。运行最快，但没有调试符号],
-    [`debug`], [需要断点与单步调试时。体积大、运行慢，但符号完整],
-    [`developer`], [开发时推荐：打开更多检查与开发者向默认选项],
-    [`lite`], [只要一个可以运行的精简版本。编译时间明显更短],
-    [`full`], [需要全部可选功能时],
+    table.header([*类型或档位*], [*适用场景*]),
+    [`Release` 类型（默认）], [日常使用、性能测量与截图。启用优化，不适合逐句单步调试],
+    [`Debug` 类型（`debug`）], [需要断点与单步调试时。体积更大、运行更慢，但调试信息完整],
+    [`lite` 档位], [第一次验证工具链，或只需要一个精简的可运行版本],
+    [`developer` 档位], [修改 C++ 源码时推荐：打开断言、测试和开发者向检查],
+    [`full` 档位], [需要完整可选功能，但不需要官方发布构建中的 GPU 二进制内核],
   ),
-  caption: [构建类型的取舍],
+  caption: [构建类型与构建档位的取舍],
 ) <tbl-e-build-types>
 
 === E.2.5 路径里有空格
 
-Windows 的构建脚本会主动检查并拒绝含空格的路径。把源码放在不含空格的目录下，
-或者用短路径（8.3 名称）绕开。这类问题在别处往往表现为莫名其妙的链接错误，
-不如一开始就避开。
+Windows 的构建脚本会主动检查并拒绝含空格的路径。把源码放在
+`C:\dev\blender` 这类不含空格的目录下；不要依赖短路径名称绕过检查，否则后续工具仍可能
+在路径转换时失败。
 
 == E.3 运行与调试
 

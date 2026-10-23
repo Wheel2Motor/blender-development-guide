@@ -1,6 +1,6 @@
 #import "../common.typ": *
 
-= 附录 C 命令速查
+= 附录 C Blender 构建与开发命令速查
 
 本附录把全书用到的命令集中到一处，按"我正要做什么"组织。所有内容都以
 本书的核对基准版本（见前言）为准，来源在每节标注了源码位置。
@@ -72,7 +72,7 @@ $ make.bat ninja
 `ninja` 开关让 `make.bat` 使用 Ninja 而不是 MSBuild。构建目录的最终名字会带上架构、
 VS 版本与构建类型，例如 `build_windows_x64_vc17_Release`。
 
-=== C.2.1 构建开关全集
+=== C.2.1 构建开关速查
 
 #figure(
   kind: table,
@@ -161,7 +161,7 @@ $ make             # 配置（若需要）并构建
 $ make debug       # 调试构建
 ```
 
-=== C.3.1 `make` 目标全集
+=== C.3.1 `make` 目标速查
 
 #figure(
   kind: table,
