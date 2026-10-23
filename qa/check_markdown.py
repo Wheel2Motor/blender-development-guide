@@ -24,7 +24,8 @@ class Issue:
 
 
 def markdown_files() -> list[Path]:
-    files = [ROOT / "README.md", ROOT / "RELEASE_NOTE.md", ROOT / "AGENTS.md"]
+    files = [ROOT / "README.md", ROOT / "RELEASE_NOTE.md", ROOT / "AGENTS.md",
+             ROOT / "TODO.md"]
     files.extend(sorted((ROOT / "doc").rglob("*.md")))
     return [path for path in files if path.is_file()]
 

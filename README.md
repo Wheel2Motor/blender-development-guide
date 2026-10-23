@@ -121,6 +121,7 @@ Typst 自身不会被下载：脚本只查 `tools/bin/typst[.exe]` 与 `PATH`，
 - [Blender 构建与实证](doc/README-BLENDER.md)：源码、编译、运行测试和截图规范。
 - [质量检查](doc/README-QA.md)：稳定检查器、适用边界和不应归档的产物。
 - [发布说明](RELEASE_NOTE.md)：已发布版本及下一版本的待发布改动。
+- [TODO.md](TODO.md)：书稿内容的待办清单（多镜像拉取、重试等选题）。
 - `AGENTS.md`：面向维护者和自动化工具的工程约束，保留在仓库根目录。
 
 ## SCons 入口
