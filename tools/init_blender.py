@@ -806,7 +806,9 @@ def ensure_libs(src: str, check_only: bool) -> bool:
                 return False
             say(OK, "Git LFS files for lib/%s are materialized." % name)
             return True
-        say(OK, "No Git LFS pointer files found in the sample scanned.")
+        check_scope = ("the complete tracked-file list" if tool_path("git-lfs")
+                       else "the fallback sample")
+        say(OK, "No Git LFS pointer files found in %s." % check_scope)
         say(INFO, "If a build fails with missing libs, check the first line of any file:")
         say(INFO, "  a materialized file is binary; an LFS pointer starts with")
         say(INFO, "  'version https://git-lfs...' -> the content was never downloaded.")
@@ -880,7 +882,9 @@ def ensure_libs(src: str, check_only: bool) -> bool:
                 return False
             say(OK, "Git LFS files for lib/%s are materialized." % name)
         else:
-            say(OK, "No Git LFS pointer files found in the sample scanned.")
+            check_scope = ("the complete tracked-file list" if tool_path("git-lfs")
+                           else "the fallback sample")
+            say(OK, "No Git LFS pointer files found in %s." % check_scope)
         say(INFO, "An LFS pointer file starts with 'version https://git-lfs...' -- if you see")
         say(INFO, "that as the first line of a library file, its real content is missing.")
         return True

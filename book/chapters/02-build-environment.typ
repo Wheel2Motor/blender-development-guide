@@ -85,7 +85,7 @@
   Python 运行。
 - #win 的引导路径不同：`make.bat update` 会先下载预编译库
   （其中包含 Python），再调用需要 Python 的更新脚本（#src("make.bat:82-98")）。
-  若你在库没下完时中断，随后跑 `make_update.py` 会得到
+  若你在库没下完时中断，随后执行 `make_update.py` 会得到
   `python not found, required for this operation`
   （#src("build_files/windows/update_sources.cmd:1-4")）。
 
@@ -152,7 +152,7 @@ MSVC 实际门槛已经是 *VS2022 17.14.14*。用 VS2019 配置不会在 `make.
   `WITH_LIBS_PRECOMPILED`（#src("CMakeLists.txt:522-528")）、
   `WITH_INSTALL_PORTABLE`（#src("CMakeLists.txt:546-551")）。
   在命令行用 `-DWITH_XXX=ON` 覆盖，在缓存里改也可以。想知道全部可选项，
-  跑 `make help_features`（#src("GNUmakefile:667")）。
+  执行 `make help_features`（#src("GNUmakefile:667")）。
 
 #tip[
   一个立刻能用的判断法：*看到 `WITH_` 开头的全部大写下划线标识符，
@@ -259,6 +259,78 @@ Blender 官方仓库在 `projects.blender.org`。要拿到本书的核对基准�
 其中 `BLENDER_VERSION_SUFFIX` 为 `LTS`）。行号对应这一版；
 你的版本如果不同，请以同名符号为准检索。
 
+==== 从镜像获取源码：先探测，再下载
+
+主仓库有三个常见来源，但它们的职责并不相同：
+
+- `https://projects.blender.org/blender/blender.git` 是官方主仓库，也是 Git LFS 对象的权威来源。
+- `https://github.com/blender/blender.git` 是 Blender 官方维护的 GitHub 镜像，适合官方 Git 服务连接不稳定时使用。
+- `https://gitee.com/mirrors/blender.git` 是 Gitee `mirrors` 组织维护的第三方镜像，不是 Blender 官方镜像，发布分支的同步进度可能落后。
+
+镜像通常只解决 Git 对象的下载，不保证托管主仓库的 LFS 对象；镜像地址和分支状态也会变化。
+因此不要直接开始数 GiB 的克隆，先用轻量命令确认目标分支仍然存在：
+
+#raw(
+  "$ git ls-remote --exit-code --heads <镜像 URL> " + blender-branch,
+  block: true,
+  lang: "bash",
+)
+
+命令成功只说明镜像公开了这个分支，不能证明本书固定的 commit 一定已同步过去；完整提交号要在克隆后用 `git cat-file` 再核一次。
+如果 `ls-remote` 没有输出或返回非零状态，就在下载前换回官方仓库或另一个镜像。
+
+已经安装 Git LFS 时，直接从不提供 LFS 对象的镜像执行 `git clone`，可能在 Git 对象下载完以后才在 checkout 的 smudge 阶段失败。
+稳妥做法是先跳过 smudge，待固定版本检出后再显式从官方 LFS 远端恢复文件。
+#linux 与 #mac 的 shell 写法如下：
+
+#raw(
+  "$ export GIT_LFS_SKIP_SMUDGE=1\n"
+  + "$ git clone --branch " + blender-branch + " \\\n"
+  + "    --single-branch <镜像 URL> blender\n"
+  + "$ unset GIT_LFS_SKIP_SMUDGE",
+  block: true,
+  lang: "bash",
+)
+
+#win 的 PowerShell 写法只是在环境变量语法上不同：
+
+#raw(
+  "$env:GIT_LFS_SKIP_SMUDGE = \"1\"\n"
+  + "git clone --branch " + blender-branch + " `\n"
+  + "  --single-branch <镜像 URL> blender\n"
+  + "Remove-Item Env:GIT_LFS_SKIP_SMUDGE",
+  block: true,
+  lang: "powershell",
+)
+
+克隆结束后，下面这组命令先确认固定 commit 存在，再检出标签，并把官方仓库登记为 LFS 回退远端。
+`git lfs pull <远端>` 会为当前检出的版本下载缺失对象并更新工作树：
+
+#raw(
+  "$ cd blender\n"
+  + "$ git cat-file -e " + blender-commit + "^{commit}\n"
+  + "$ git switch --detach " + blender-tag + "\n"
+  + "$ git remote add lfs-fallback \\\n"
+  + "    https://projects.blender.org/blender/blender.git\n"
+  + "$ git config lfs.remote.searchall true\n"
+  + "$ git lfs pull lfs-fallback\n"
+  + "$ git rev-parse HEAD\n"
+  + blender-commit,
+  block: true,
+  lang: "bash",
+)
+
+如果 `git cat-file` 失败，说明镜像尚未包含本书基准；不要用镜像分支顶端的另一个 commit 冒充，应该换源重新克隆。
+在本书工程中可以把上述探测、跳过 smudge、LFS 回退和完整性检查交给统一入口：
+
+```bash
+$ scons init-blender --mirror=github
+$ scons init-blender --mirror=gitee
+$ scons init-blender --mirror-url=https://git.example.com/blender.git
+```
+
+`--mirror` 只切换主仓库的克隆来源，不改变预编译库子模块和 LFS 对象的权威来源；已有 `blender/` 检出也不会被它悄悄换远端。
+
 === 2.2.2 四个预编译库子模块
 
 Blender 不想让每个开发者都从零编译 100 多个第三方库，所以它把预编译结果
@@ -338,6 +410,35 @@ Python 脚本；只更新代码、不动预编译库则是 `make update_code`，
 主仓库本身*。主仓库只有在当前本地分支配置了上游时才会更新；处于固定标签的
 detached HEAD 时，脚本会跳过主仓库拉取，但仍会补齐主仓库 LFS 与平台库。
 
+==== 下载中断后如何重试
+
+Git LFS 对象按内容寻址，已经完整落盘的对象不会因为再次执行 `git lfs pull` 而重下。
+因此网络中断后的正确动作是重复同一个更新命令，让它只补缺口，而不是删除整个源码目录从头开始：
+
+```bash
+$ git lfs pull
+$ git -C lib/<平台>_<架构> lfs pull
+```
+
+使用 Blender 上游入口时，也可以重新执行 `make update`（#win 为 `make.bat update`）。
+在本书工程中，`init-blender` 会让每个联网步骤在失败后自动重试，默认最多再试 10 次、每次间隔 10 秒；网络状况特殊时可显式调整：
+
+```bash
+$ scons init-blender --retries=30 --retry-delay=20
+$ scons init-blender --retries=0  # 关闭重试，首次失败就退出
+```
+
+如果中断后 `git status` 突然把成百上千个 LFS 路径显示为已修改，不要立刻提交、还原或删除这些文件。
+先用 `git rev-parse --git-dir` 找到实际 Git 元数据目录，再检查其中是否残留 `index.lock`；子模块的 `.git` 可能是指向主仓库 `.git/modules/...` 的文本文件，不能凭路径猜测锁在哪里。
+只有在确认所有 Git / Git LFS 进程都已退出后，才可以删除这个残留的锁文件，然后重新执行 `git lfs pull` 与 `git status`。
+
+#tip[
+  *并发数不是越大越快。* 在同一台 Windows x64 机器、同一网络和本书固定的 #blender-display-version 检出上实测主仓库 LFS：默认 8 路约为 0.43 MiB/s，32 路约为 1.6 MiB/s，64 路约为 2.0 MiB/s。
+  从 32 提到 64 只增加约 25%，并且在这条网络路径上已经接近约 2 MiB/s 的上限；同时下载主仓库 LFS 与 `lib/` LFS 没有得到可辨认的总耗时收益。
+  这是一组 2026-10-23 的单机观测，不是 Blender 服务器的性能承诺；本书脚本取 32 作为速度与服务器压力的折中。
+  想在自己的网络上比较时，应使用相同 commit、分别准备干净检出，并记录 `git -c lfs.concurrenttransfers=<N> lfs pull` 的对象量与总时间，不要用已经有本地 LFS 缓存的第二次执行冒充对照实验。
+]
+
 === 2.2.4 版本差异：为什么现在是 Git LFS 而不是 SVN
 
 如果你读的是 2019 年前后的 Blender 构建教程，多半会看到这样的说法：
@@ -396,11 +497,34 @@ Running "make update" or "git lfs pull" may resolve the issue.
 
 看到这条报错时，不要去找编译器或 SDK 的问题 —— 它 100% 是 LFS 没拉全。
 
-本节可以压成一句话：*`git clone` 拿到 Git 工作树，`make update`
-（#win 是 `make.bat update`）补齐主仓库 LFS 与本机平台库；首次配置前二者都必须完整。*
-任何"库没下完 / LFS 没下完"的症状，最终都会在 CMake 配置阶段以
-`Unable to find LIBDIR`（#linux）、`Mac OSX requires pre-compiled libs`
-（#mac）或 `Detected incomplete startup blend`（三平台通用）的形式暴露出来。
+但 `startup.blend` 只是 CMake 选择的一枚哨兵，不是“LFS 已完整”的证明。
+固定基准里还有画笔资源、图标数据、预览文件与 `release/datafiles/colormanagement/icc/` 下的 ICC 配置由 LFS 管理；只要 `startup.blend` 已恢复，其他路径仍是指针时 configure 也可能通过，最后得到的程序却缺资源或在运行、测试阶段才报错。
+
+完整检查应覆盖 `git lfs ls-files` 列出的每个路径：
+
+```bash
+$ git lfs ls-files
+de873a2094 * assets/brushes/essentials_brushes-curve_sculpt.blend
+...
+```
+
+OID 后面的 `*` 表示工作树中是完整对象，`-` 表示仍是 LFS 指针；检查时不应出现任何 `-` 记录。
+需要人工确认可疑文件时，LFS 指针通常只有一百多字节，第一行固定为：
+
+```text
+version https://git-lfs.github.com/spec/v1
+```
+
+体积很小和这行文件头要同时看，因为“小文件”本身不一定是指针。
+预编译库子模块也要在自己的仓库目录执行同样的 `git lfs ls-files` 检查，不能只核对主仓库。
+在本书工程里，下面的只读检查会遍历主仓库和当前平台库的全部 LFS 路径，不下载或修改文件：
+
+```bash
+$ scons init-blender --check-only
+```
+
+本节可以压成一句话：*`git clone` 只拿到 Git 工作树；`make update`（#win 是 `make.bat update`）负责补齐主仓库 LFS 与本机平台库；开始配置前还要按 LFS 清单全量核对。*
+库目录缺失会表现为 `Unable to find LIBDIR`（#linux）或 `Mac OSX requires pre-compiled libs`（#mac），`startup.blend` 未恢复会触发三平台通用的 `Detected incomplete startup blend`，其余 LFS 缺口则未必能在配置阶段被发现。
 
 == 2.3 Windows 构建
 
@@ -453,7 +577,7 @@ Running "make update" or "git lfs pull" may resolve the issue.
 :: 2. 首次：更新源码并下载预编译库（会问 y/n，回答 y）
 > make.bat update
 
-:: 3. 首次构建：用 Ninja + Release，先跑一次"轻量"配置以便快速成功
+:: 3. 首次构建：用 Ninja + Release，先执行一次"轻量"配置以便快速成功
 > make.bat ninja lite
 
 :: 4. 确认能启动
@@ -466,7 +590,7 @@ Running "make update" or "git lfs pull" may resolve the issue.
 > make.bat ninja debug
 ```
 
-第 3 步之所以建议先跑 `lite`，是因为它关掉了大量可选组件
+第 3 步之所以建议先使用 `lite`，是因为它关掉了大量可选组件
 （#src("build_files/cmake/config/blender_lite.cmake:12-86")：
 USD、Alembic、Cycles、OpenVDB、Draco、FFmpeg 编解码等统统关掉），
 首次编译时间能明显缩短，而且能在你投入几小时之前先确认工具链是通的。
@@ -610,10 +734,10 @@ make.bat ninja bpy             -> ..\build_windows_Bpy_x64_vc17_Release
   `lib\windows_x64\.git` 是否存在（#src("build_files/windows/check_libraries.cmd:10")）。
   也就是说*一个残缺的 `.git` 目录会被当成"库已就绪"*，于是它不再询问、
   直接进入配置，然后在 CMake 里失败。遇到这种情况，最干净的做法是删掉
-  `lib\windows_x64` 整个目录，重新 `make.bat update`，并这次等它彻底跑完。
+  `lib\windows_x64` 整个目录，重新执行 `make.bat update`，并等待它彻底完成。
 - *构建目录命名不符合预期。* 命名规则见 2.3.2。最常见的两个困惑：
   "为什么加了 `developer` 却没生成新目录"（它不设置 `TARGET`），
-  以及"为什么 `lite` 的名字里 `Lite` 跑到了架构前面"
+  以及"为什么 `lite` 的名字里 `Lite` 排到了架构前面"
   （拼串顺序是 `<基名>_<TARGET>_<架构>_vc<版本>_<类型>`，
   见 #src("build_files/windows/set_build_dir.cmd:1-2")）。
   想完全控制目录名就用 `make.bat builddir <路径>`。
@@ -788,7 +912,7 @@ $ python3 build_files/build_environment/install_linux_packages.py --distro-id de
 ```
 
 它的说明文本写得很清楚：*默认只安装构建 Blender 所需的关键工具与依赖，
-不包含预编译库已经提供的那些库；跑完之后应当再执行 `make update`*
+不包含预编译库已经提供的那些库；完成后应当再执行 `make update`*
 （#src("build_files/build_environment/install_linux_packages.py:1132-1151")）。
 它用 `sudo` 或 `doas` 提权；两者都没有时可以用 `--no-sudo`，
 此时它只打印需要安装的包名。
@@ -841,7 +965,7 @@ Linux 默认是*便携安装*：`WITH_INSTALL_PORTABLE` 默认 `ON`
 - 主程序：`<构建目录>/bin/blender`（#src("GNUmakefile:351-353")）。
 - 动态库：与主程序同级的 `lib/`，通过 RPATH 里的 `$ORIGIN/lib` 定位
   （#src("build_files/cmake/platform/platform_unix.cmake:1093-1102")）。
-  这意味着*把整个 `bin/` 目录搬到另一台机器上仍然能跑*，
+  这意味着*把整个 `bin/` 目录搬到另一台机器上仍然能运行*，
   前提是目标机的 glibc 版本足够新（见 2.5.4 常见问题）。
 - 测试程序的相对路径略有不同，源码里明确区分了
   `Blender.app`（#mac）/ `<版本号>`（#win 或便携安装）/
@@ -929,16 +1053,20 @@ $ make deps
 首次构建时间长，原因不是 Blender 本身，而是*依赖与生成步骤*：
 
 - `intern/`、`extern/` 下的第三方库全部要从源码或预编译静态库参与链接。
-- RNA 相关的生成步骤（`makesdna`、`makesrna`）要先跑一遍，
+- RNA 相关的生成步骤（`makesdna`、`makesrna`）要先执行一遍，
   它们会把 `DNA_*.h` 与 `RNA_*.cc` 变成 C 代码。
 - 着色器、图标、语言包、Python 字节码都在构建期生成。
 
-所以首次构建是"*跑一次可能半小时到几小时*"，而第二次改一个 `.cc`
-文件通常只需要几十秒到几分钟。这个落差是正常的，别以为构建系统坏了。
+所以首次构建可能需要半小时到几小时，而第二次改一个 `.cc` 文件通常只需要几十秒到几分钟。
+这个落差是正常的，不表示构建系统损坏。
+
+先判断中断发生在哪个阶段：源码、LFS 或预编译库下载失败时，重复 §2.2.3 的更新命令即可，不要删除构建目录；真正进入编译后被中断，则直接重新执行同一条 `make`、`make.bat`、Ninja 或 MSBuild 命令。
+构建后端会复用已经成功生成的目标，只继续未完成或受影响的部分。
+在本书工程里，这两层职责分别是可重试的 `scons init-blender` 和可重复执行的 `scons build-blender`。
 
 === 2.6.2 增量编译
 
-POSIX 上最简单的增量构建就是再跑一次：
+POSIX 上最简单的增量构建就是再次执行：
 
 ```bash
 $ make
@@ -1026,7 +1154,7 @@ $ ninja -C ../build_linux install
       并生成 `compile_commands.json`
       （#src("build_files/cmake/config/blender_developer.cmake:11-30")）],
     [*改 Blender C++ 源码时的默认选择*。
-      断言会在出错处直接停下，而不是悄悄跑过去],
+      断言会在出错处直接停下，而不是悄悄继续执行],
     [`cycles`],
     [`cycles_standalone.cmake`],
     [`WITH_BLENDER=OFF` + `WITH_CYCLES_STANDALONE=ON`，
@@ -1067,7 +1195,7 @@ $ ninja -C ../build_linux install
 - `make ninja`：把后端换成 Ninja（#src("GNUmakefile:325-328")）。
 - `make ccache`：打开 ccache（`-DWITH_COMPILER_CCACHE=YES`，
   见 #src("GNUmakefile:318-320")）。
-- `make test`：跑测试套件。它的实现是调用
+- `make test`：运行测试套件。它的实现是调用
   `build_files/utils/make_test.py`，而后者转手执行
   `ctest . --output-on-failure -O <构建目录>/tests/log.txt`
   （#src("build_files/utils/make_test.py:47-59")）。
@@ -1080,7 +1208,7 @@ $ ninja -C ../build_linux install
 - `make package_archive`：打包成归档，产物在 `<构建目录>/release`
   （#src("GNUmakefile:469-471")）。
 - `make format` / `make license`：格式化与许可证检查
-  （#src("GNUmakefile:623-628")）。提交代码前通常要跑一次 `make format`。
+  （#src("GNUmakefile:623-628")）。提交代码前通常要执行一次 `make format`。
 
 还有一整组 `check_*` 静态检查目标（`check_cppcheck`、`check_mypy`、
 `check_pep8`、四种拼写检查、`check_struct_comments`、`check_size_comments`、
@@ -1090,7 +1218,7 @@ $ ninja -C ../build_linux install
 
 == 2.7 运行与调试
 
-构建完成只是开始。这一节讲怎么*把刚编译出来的 Blender 跑起来并看住它*。
+构建完成只是开始。这一节讲怎么*启动刚编译出来的 Blender 并监控它*。
 
 === 2.7.1 三个最重要的命令行参数
 
@@ -1102,7 +1230,7 @@ Blender 的命令行参数在 #src("source/creator/creator_args.cc") 里注册�
   并且它默认会关掉音频设备
   （#src("source/creator/creator_args.cc:3160")、
   #src("source/creator/creator_args.cc:1109-1114")）。
-  你写自动化脚本、跑渲染、跑回归测试都靠它。
+  你写自动化脚本、执行渲染与回归测试都靠它。
 - `-X` / `--factory-startup`：*跳过用户目录里的启动文件*，
   也就是忽略你的偏好设置与已安装插件，以出厂状态启动
   （#src("source/creator/creator_args.cc:3348")、
@@ -1230,7 +1358,7 @@ $ gdb --args ./bin/blender --background --factory-startup \
 不存在 `.vscode`。工程文件都是本地生成的。
 
 - #win：CMake 的 Visual Studio 生成器直接产出 `Blender.sln`
-  （VS2026 下是 `Blender.slnx`）。不加 `ninja` 开关跑一次
+  （VS2026 下是 `Blender.slnx`）。不加 `ninja` 开关执行一次
   `make.bat` 就会得到它（#src("build_files/windows/configure_msbuild.cmd:41")、
   #src("make.bat:76-80")）。用 `make.bat nobuild` 可以只生成工程不编译。
   另外源码里带了一份 Visual Studio 的调试可视化配置
@@ -1363,7 +1491,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS     ON  CACHE BOOL "" FORCE)
 
     [最需要注意的易错点],
     [路径不能含空格；\
-     首次库下载不能中断；\
+     下载中断后须重试并全量核对 LFS；\
      `sccache` 只支持 Ninja],
     [Intel Mac 无预编译库；\
      构建目录叫 `darwin` 不叫 `macos`],
@@ -1378,12 +1506,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS     ON  CACHE BOOL "" FORCE)
   这一章的要点可以压缩成五句话：
 
   1. *入口不同*：#win 用 `make.bat`，其余用 `make`；`GNUmakefile` 明确拒绝 Windows。
-  2. *依赖靠 Git LFS 子模块*，不是 SVN；`make update` / `make.bat update` 是唯一入口，
-     第一次下载很慢且不能中断。
+  2. *镜像只替换主仓库的 Git 来源，不替代官方 LFS*；依赖靠 Git LFS 子模块而不是 SVN，
+     下载中断后可以续传，但必须按 `git lfs ls-files` 全量核对。
   3. *三平台用同一套 CMake 工程与同一批 `build_files/cmake/config/*.cmake` 档位*，
      差异只在生成器、编译器、产物形态与系统依赖。
   4. *改 C++ 源码就用 `debug developer`*；只想快速验证工具链就先 `lite`。
-  5. *跑起来之后立刻配好两个调试器插件*（gdb / lldb 的美化打印器），
+  5. *启动后立刻配好两个调试器插件*（gdb / lldb 的美化打印器），
      它们会让后面所有章节的调试工作轻松一个数量级。
 ]
 
