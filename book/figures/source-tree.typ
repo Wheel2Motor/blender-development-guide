@@ -81,7 +81,7 @@
       "随发行版的 Python：startup/、addons_core/、modules/",
       false,
     ),
-    ("├─ build_files/", "—", luma(50%), "CMake 平台配置与三平台构建脚本", false),
+    ("├─ build_files/", "—", luma(50%), "CMake 平台配置与不同平台的构建脚本", false),
     ("└─ lib/", "—", luma(50%), "预编译依赖（Git LFS 子模块，按平台分目录）", false),
     (
       "   release/ doc/ tests/ tools/",

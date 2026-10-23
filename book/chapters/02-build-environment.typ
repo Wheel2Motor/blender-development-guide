@@ -1,10 +1,10 @@
 #import "../common.typ": *
 #import "../figures/build-flow.typ": fig-build-flow
 
-= 第 2 章 三平台开发环境与构建
+= 第 2 章 不同平台的开发环境与构建
 
 第 1 章给出了源码地图，本章把这张地图变成一套可执行的构建流程：准备工具，获取源码与
-依赖，完成配置和构建，最后启动自己编译的 Blender。三平台共用同一套 CMake 工程，
+依赖，完成配置和构建，最后启动自己编译的 Blender。不同平台共用同一套 CMake 工程，
 差别主要集中在构建入口、编译器、平台依赖和产物形态。
 
 Blender 的构建耗时较长，工具版本或依赖出错会显著放大试错成本。更重要的是，构建流程会
@@ -15,7 +15,7 @@ Blender 的构建耗时较长，工具版本或依赖出错会显著放大试错
 
 == 2.1 通用工具链
 
-三平台的构建系统是同一套 CMake 工程，差别只在外层的驱动脚本和预编译库。
+不同平台的构建系统使用同一套 CMake 工程，差别只在外层的驱动脚本和预编译库。
 所以先把平台无关的部分讲完。
 
 === 2.1.1 工具与最低版本
@@ -66,7 +66,7 @@ Blender 的构建耗时较长，工具版本或依赖出错会显著放大试错
     [`platform_apple_xcode.cmake:18-21`、\
      `:159-163`],
   ),
-  caption: [构建 Blender 所需的通用工具与三平台编译器要求。],
+  caption: [构建 Blender 所需的通用工具与不同平台的编译器要求。],
 ) <tbl-toolchain>
 
 关于 Python，有一个必须澄清的常见误解：*预编译库里的 Python 与系统 Python
@@ -454,14 +454,14 @@ OID 后面的 `*` 表示工作树中是完整对象，`-` 表示仍是 LFS 指�
 本节可以压成一句话：*`git clone` 取得 Git 历史与 LFS 指针；`make update`
 （#win 是 `make.bat update`）补齐主仓库 LFS 与本机平台库；开始配置前，再按 LFS 清单
 确认工作区里没有残留指针。* 库目录缺失会表现为 `Unable to find LIBDIR`（#linux）或
-`Mac OSX requires pre-compiled libs`（#mac）；`startup.blend` 未恢复会触发三平台通用的
+`Mac OSX requires pre-compiled libs`（#mac）；`startup.blend` 未恢复会触发不同平台均可能出现的
 `Detected incomplete startup blend`，其他 LFS 缺口则未必能在配置阶段被发现。
 
 == 2.3 Windows 构建
 
 从本节开始按平台展开。先看全局：
 
-#figure(fig-build-flow(), caption: [三平台构建流程对照（五阶段 × 三平台）]) <fig-build-flow>
+#figure(fig-build-flow(), caption: [不同平台的构建流程对照（五个阶段）]) <fig-build-flow>
 
 图中 Windows 一行采用推荐的 `make.bat ninja` 路径。若不加 `ninja`，`make.bat` 会使用
 Visual Studio 生成器和 MSBuild（#src("make.bat:137-149")）；两种路径的区别见 §2.3.3。
@@ -633,7 +633,7 @@ make.bat ninja bpy             -> ..\build_windows_Bpy_x64_vc17_Release
 
 === 2.4.1 前置条件
 
-#mac 是三平台里前置条件最少的一个：
+#mac 的前置条件相对较少：
 
 - *Xcode 或 Xcode 命令行工具（Command Line Tools）16.0 以上。* 构建系统会调用
   `xcode-select --print-path`（#src("build_files/cmake/platform/platform_apple_xcode.cmake:16-21")）
@@ -1146,7 +1146,7 @@ python_stubs: .FORCE
 
 === 2.7.3 单步调试：gdb 与 lldb
 
-三平台各有一个"主力调试器"：
+不同平台各有适合的主力调试器：
 
 - #linux：`gdb`（或 `lldb`）。
 - #mac：`lldb`（Xcode 自带）。
@@ -1207,7 +1207,7 @@ $ gdb --args ./bin/blender --background --factory-startup \
   它调用 #src("tools/utils_ide/cmake_qtcreator_project.py")
   （#src("GNUmakefile:488-489")）；`make project_eclipse`
   生成 Eclipse CDT4 工程（#src("GNUmakefile:491-492")）。
-- 三平台通用：*VSCode + CMake Tools 或 clangd*。关键在于
+- 不同平台通用：*VSCode + CMake Tools 或 clangd*。关键在于
   `compile_commands.json` —— 它是 Clang 系工具链取得每个文件的
   头文件搜索路径与编译选项的标准方式（很多 IDE 都依赖它）。
   `blender_developer.cmake` 里有专门一行打开它：
@@ -1227,7 +1227,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS     ON  CACHE BOOL "" FORCE)
 
 完成一次构建后，不必继续记忆平台表格。日常工作只需要保留三条稳定路径：依赖或版本变化时
 重新执行更新命令；修改 C++ 后对既有构建目录做增量构建；需要断点调试时使用独立的
-`debug developer` 构建。三平台的命令、目录和产物位置已经集中在附录 D，遇到错误再按附录 E 的症状
+`debug developer` 构建。不同平台的命令、目录和产物位置已经集中在附录 D，遇到错误再按附录 E 的症状
 索引排查。
 
 #summary[
@@ -1237,7 +1237,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS     ON  CACHE BOOL "" FORCE)
   2. *预编译依赖通过 Git 子模块引用，子模块中的大文件再由 Git LFS 管理，而不是 SVN*；
      网络不稳定时可以改用镜像，但镜像不替代官方 LFS，
      下载中断后可以续传，但必须按 `git lfs ls-files` 全量核对。
-  3. *三平台用同一套 CMake 工程与同一批 `build_files/cmake/config/*.cmake` 档位*，
+  3. *不同平台使用同一套 CMake 工程与同一批 `build_files/cmake/config/*.cmake` 档位*，
      差异只在生成器、编译器、产物形态与系统依赖。
   4. *改 C++ 源码就用 `debug developer`*；只想快速验证工具链就先 `lite`。
   5. *启动后立刻配好两个调试器插件*（gdb / lldb 的美化打印器），

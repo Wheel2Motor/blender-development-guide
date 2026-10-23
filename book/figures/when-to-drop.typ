@@ -81,7 +81,7 @@
     anchor: "west")
   content((x0 + 0.26, y-d + 0.30),
     text(font: font-zh, size: 7.1pt, weight: 400, fill: luma(24%))[
-      经 `ctypes` / `cffi` / PyO3 接入；三平台各出一份二进制。],
+      经 `ctypes` / `cffi` / PyO3 接入；不同平台分别生成对应的二进制。],
     anchor: "west")
 
   // 右侧出口：改 C++ 源码

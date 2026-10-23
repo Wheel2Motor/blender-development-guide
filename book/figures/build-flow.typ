@@ -1,8 +1,8 @@
 // ============================================================================
-//  图 2：三平台构建流程对照
+//  图 2：不同平台的构建流程对照
 //  用法：
 //    #import "../figures/build-flow.typ": fig-build-flow
-//    #figure(fig-build-flow(), caption: [三平台构建流程对照])
+//    #figure(fig-build-flow(), caption: [不同平台的构建流程对照])
 //
 //  事实来源（均已核对）：
 //   - CMakeLists.txt:29        cmake_minimum_required(VERSION 3.21)

@@ -1519,7 +1519,7 @@ C 宽字符缓冲」和「把输出参数传进去」两个问题。
 #tip[
   去找你需要的库时，先看看 Blender 自己是怎么加载动态库的。
   glTF addon 的 `dll_path()`（#src("scripts/addons_core/io_scene_gltf2/io/com/library.py:10")）
-  是一份现成的、处理了三平台差异与安装目录差异的实现，
+  是一份现成的、处理了不同平台及安装目录差异的实现，
   可以直接借鉴（注意它的许可证是 Apache-2.0，与 Blender 的 GPL 不同，
   只能参考思路，不能整段抄进你的 GPL 插件）。
 ]
@@ -1527,7 +1527,7 @@ C 宽字符缓冲」和「把输出参数传进去」两个问题。
 === 6.6.3 写原生库：一个完整可编译的例子
 
 下面的例子在本书的核对环境里*实际编译并运行过*（见「验证」小节）。
-它在三平台都能用同一份源码。完整的 C 文件、Python 绑定和测试脚本一并随书提供。
+它在不同平台都能使用同一份源码。完整的 C 文件、Python 绑定和测试脚本一并随书提供。
 #example-file("ch06/native_probe")
 
 #figure(
@@ -1542,7 +1542,7 @@ C 宽字符缓冲」和「把输出参数传进去」两个问题。
     [#linux], [`gcc -O2 -Wall -Wextra -fPIC -shared -o libprobe_native.so probe_native.c -lm`],
     [#mac], [`cc -O2 -Wall -Wextra -dynamiclib -o libprobe_native.dylib probe_native.c`],
   ),
-  caption: [三平台的编译命令。用 clang / MSVC 也可以，只是导出宏的写法不同],
+  caption: [不同平台的编译命令。用 clang / MSVC 也可以，只是导出宏的写法不同],
 ) <tbl-native-build>
 
 ```c
@@ -1622,7 +1622,7 @@ PROBE_EXPORT int PROBE_CALL probe_bounds(const float *coords,
     stroke: 0.4pt + luma(78%),
     table.header([*约定*], [*不遵守会怎样*]),
     [`extern "C"` / `#[no_mangle]`], [C++ 编译器会做名字修饰（name mangling），`ctypes` 按原名找不到符号，报 `AttributeError: function 'foo' not found`],
-    [`uint32_t` / `size_t` 等定宽类型], [`int` 在三平台未必同宽；`long` 在 Windows 是 32 位、在 Linux 是 64 位，这是最阴的一类 bug],
+    [`uint32_t` / `size_t` 等定宽类型], [`int` 在不同平台未必同宽；`long` 在 Windows 是 32 位、在 Linux 是 64 位，这是最阴的一类 bug],
     [`PROBE_CALL`（`__cdecl`）], [Windows 上 32 位程序的默认调用约定可能是 `__stdcall`，参数被错误地弹栈。64 位下两者统一，所以这个 bug 只在 32 位目标上出现],
     [参数非空与范围自检], [`ctypes` 传来的指针不会自动校验。一次空指针解引用会让*整个 Blender* 崩溃，而不是抛异常],
     [不做 I/O、不打印], [标准输出在无界面模式下可能不可用；而且日志会与 Blender 自己的输出交错],
@@ -1642,7 +1642,7 @@ import ctypes
 import os
 import sys
 
-# 三平台的文件名约定与 Blender 官方 glTF addon 一致
+# 不同平台的文件名约定与 Blender 官方 glTF addon 一致
 if sys.platform == "win32":
     _LIB_NAME = "probe_native.dll"
 elif sys.platform == "darwin":
@@ -1858,7 +1858,7 @@ _ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
 
 ==== 二、不要打包所有平台的库
 
-一个 zip 里同时放三平台的 `.dll` / `.so` / `.dylib` 会让体积翻倍，
+一个 zip 里同时放不同平台的 `.dll` / `.so` / `.dylib` 会让体积翻倍，
 而且 Blender 的扩展平台（§7 会讲）支持按平台分发的机制。
 如果手动分发，就在加载失败时给一条清楚的错误信息，
 而不是让用户看到 `OSError: [WinError 126]`：

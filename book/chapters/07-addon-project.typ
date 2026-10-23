@@ -1146,7 +1146,7 @@ def write_report(filepath, text, *, use_timestamp_dir=False):
 #tip[
   写文本文件时显式指定 `encoding="utf-8"` 和 `newline="\n"`。
   前者避免中文报告在 Windows 上按系统代码页写坏；
-  后者让三平台产出的报告可以被同一套 diff 工具比较。
+  后者让不同平台产出的报告可以被同一套 diff 工具比较。
 ]
 
 === 7.3.5 UIList
@@ -1271,7 +1271,7 @@ $ Compress-Archive -Path mesh_inspector -DestinationPath mesh_inspector-1.0.0.zi
 先看 `BLENDER_USER_SCRIPTS` 环境变量，
 未设置则在用户根目录下拼出 `scripts` 子目录。
 
-用户根目录来自 GHOST，三平台各不相同：*Windows* 用
+用户根目录来自 GHOST，不同平台各不相同：*Windows* 用
 `FOLDERID_RoamingAppData`（#src("intern/ghost/intern/GHOST_SystemPathsWin32.cc:44-L57")）；
 *Linux* 优先 `$XDG_CONFIG_HOME/blender/<版本>`，
 否则 `$HOME/.config/blender/<版本>`
@@ -1304,7 +1304,7 @@ $ Compress-Archive -Path mesh_inspector -DestinationPath mesh_inspector-1.0.0.zi
     [`/Library/Application Support/Blender/5.2/scripts/addons/`，
       回退到 `Blender.app/Contents/Resources/5.2/scripts/addons/`],
   ),
-  caption: [三平台的 addon 目录。版本号是 `主版本.次版本`，不含补丁号。],
+  caption: [不同平台的 addon 目录。版本号是 `主版本.次版本`，不含补丁号。],
 ) <tbl-addon-dirs>
 
 #note[

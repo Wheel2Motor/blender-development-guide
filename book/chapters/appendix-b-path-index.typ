@@ -516,7 +516,7 @@ Python 侧的一切都在 `scripts/` 下（共 9 个子目录、808 个文件、
   stroke: 0.4pt + luma(78%),
   table.header([*我想做的事*], [*先看这里*], [*说明*]),
 
-  [构建入口（三平台通用）],
+  [构建入口（不同平台通用）],
   [#p("make.bat")
     #p("GNUmakefile")],
   [#win 用 `make.bat`（`GNUmakefile:175` 明确声明不面向 Windows）；
