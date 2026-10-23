@@ -8,12 +8,12 @@
 
 ## 0.2.2
 
-- 新增 `scons init-blender --mirror=github|gitee`（默认 `official`）：只切换 Blender 主仓库的克隆来源；镜像缺少基准分支或基准 commit 时先探测再失败，`--mirror-url` 可指向自建镜像。
-- `init-blender` 现在在所有平台（含 Windows）非交互准备 `lib/` 预编译库与主仓库 LFS，`scons init-blender` 成功后源码、LFS、依赖库三者即为就绪；`build-blender` 只核验，缺任一项时在 configure 之前失败并指回 `scons init-blender`，不再依赖上游 `make.bat` 的交互询问。
-- 克隆与子模块更新一律跳过 LFS smudge 后并发补齐（实测把 `projects.blender.org` 从 0.43 MiB/s 提到 1.6 MiB/s），并按 `git lfs ls-files` 全量核对，避免"半个 LFS"的树通过配置却产出缺图标/画笔/ICC 数据的 Blender。
-- 所有联网步骤失败后自动重试：默认最多再试 10 次、每次间隔 10 秒，可用 `scons init-blender --retries=N --retry-delay=SECONDS` 调整；克隆重试前会清理没拉取完成的目录。
-- 扩充第 2 章的源码获取与依赖说明：补充官方、GitHub、Gitee 镜像的探测与 LFS 回退流程，说明全量 LFS 验收、失败续传、残留 `index.lock` 处理和并发限速实测，并统一该章相关措辞。
-- 修正 `init-blender --check-only` 的 LFS 成功日志，使其准确区分完整 tracked-file 清单检查与无 Git LFS 时的 fallback 抽样检查。
+- 为 `scons init-blender` 增加源码镜像选项：默认使用 Blender 官方仓库；`--mirror=github` 选择 GitHub 官方镜像，`--mirror=gitee` 选择 Gitee 同步镜像，`--mirror-url=URL` 可指定自建或内网镜像。该选项只影响新克隆的 Blender 主仓库，不改变预编译库和 Git LFS 数据的来源。
+- 统一三个平台的初始化职责：`scons init-blender` 以非交互方式准备 Blender 源码、主仓库中的 Git LFS 文件，以及当前平台的 `lib/` 预编译库。命令成功即表示这三项内容均已就绪；Windows 不再依赖上游 `make.bat` 的交互式下载询问。
+- 收紧构建前检查：`scons build-blender` 只负责核验环境、生成工程和执行构建，不再下载依赖。若源码、Git LFS 文件或平台预编译库不完整，命令会在 CMake 配置前终止，并提示先执行 `scons init-blender`。
+- 改进 Git LFS 下载和完整性验证：克隆主仓库及更新子模块时，先跳过逐文件的 LFS 自动下载，再以并发方式集中下载对象；随后逐项检查 `git lfs ls-files` 列出的文件，防止因缺少图标、画笔或 ICC 配置等资源而不完整的工作树被误判为可用。测试网络中，`projects.blender.org` 的下载速度由约 0.43 MiB/s 提升到约 1.6 MiB/s。
+- 为所有联网步骤增加可配置的失败重试：首次失败后默认最多重试 10 次，每次间隔 10 秒；可通过 `--retries=N` 和 `--retry-delay=SECONDS` 调整。重新尝试克隆前，只清理本次操作留下的未完成目录；已经下载的 Git LFS 对象仍会继续复用。
+- 扩充第 2 章的源码获取和依赖说明：补充镜像可用性探测、Git LFS 回退、完整性检查、中断后续传、残留 `index.lock` 处理及并发设置的实测说明。同时修正 `scons init-blender --check-only` 的日志，使其明确区分完整的 Git LFS 文件清单检查与未安装 Git LFS 时的有限抽样检查。
 
 ## 0.2.1
 
