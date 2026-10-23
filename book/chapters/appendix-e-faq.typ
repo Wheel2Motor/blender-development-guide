@@ -7,7 +7,93 @@
 
 == E.1 源码获取与依赖
 
-=== E.1.1 克隆到一半被中断，之后 git 好像坏了
+=== E.1.1 官方仓库连接不稳定时，怎样选择镜像
+
+正文只使用 Blender 官方主仓库：
+
+```text
+https://projects.blender.org/blender/blender.git
+```
+
+如果所在网络访问这个地址不稳定，可以改用下面两种来源：
+
+- `https://github.com/blender/blender.git` 是 Blender 官方维护的 GitHub 镜像。Blender
+  官方文档明确说明，开发仍在 `projects.blender.org` 进行，而且 GitHub 镜像不包含
+  Git LFS 文件（#weblink("https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/#github-mirror", label: [Git Clone and Update: GitHub Mirror])）。
+- `https://gitee.com/mirrors/blender.git` 是 Gitee（码云）国内代码托管平台上的同步镜像。
+  对中国大陆读者而言，国内网络链路通常更短，因此在官方仓库或 GitHub 连接缓慢、频繁中断时，
+  它往往是更值得优先尝试的选择。Gitee 对自身平台的介绍见
+  #weblink("https://gitee.com/about_us", label: [关于 Gitee])。
+
+#note[
+  「国内镜像通常更快、更稳定」是网络位置带来的实践经验，不是对所有地区、运营商和时段的
+  绝对保证。镜像也可能尚未同步到本书固定版本；先探测、后下载，比先克隆数 GiB 再发现版本
+  不全更省时间。
+]
+
+先确认镜像公开了本书所用的发布分支：
+
+#raw(
+  "$ git ls-remote --exit-code --heads <镜像 URL> " + blender-branch,
+  block: true,
+  lang: "bash",
+)
+
+命令成功只说明分支存在，不能证明本书固定的 commit 已经同步。已经安装 Git LFS 时，
+直接克隆不提供 LFS 对象的镜像，还可能在 Git 对象下载完成后才在 checkout 阶段失败。
+因此应先跳过 LFS smudge。#linux 与 #mac 使用：
+
+#raw(
+  "$ export GIT_LFS_SKIP_SMUDGE=1\n"
+  + "$ git clone --branch " + blender-branch + " \\\n"
+  + "    --single-branch <镜像 URL> blender\n"
+  + "$ unset GIT_LFS_SKIP_SMUDGE",
+  block: true,
+  lang: "bash",
+)
+
+#win 的 PowerShell 写法是：
+
+#raw(
+  "$env:GIT_LFS_SKIP_SMUDGE = \"1\"\n"
+  + "git clone --branch " + blender-branch + " `\n"
+  + "  --single-branch <镜像 URL> blender\n"
+  + "Remove-Item Env:GIT_LFS_SKIP_SMUDGE",
+  block: true,
+  lang: "powershell",
+)
+
+#block(breakable: false)[
+  克隆结束后，先确认固定 commit 存在，再检出标签，并从官方仓库补齐 LFS 对象：
+
+  #raw(
+    "$ cd blender\n"
+    + "$ git cat-file -e " + blender-commit + "^{commit}\n"
+    + "$ git switch --detach " + blender-tag + "\n"
+    + "$ git remote add lfs-fallback \\\n"
+    + "    https://projects.blender.org/blender/blender.git\n"
+    + "$ git config lfs.remote.searchall true\n"
+    + "$ git lfs pull lfs-fallback\n"
+    + "$ git rev-parse HEAD\n"
+    + blender-commit,
+    block: true,
+    lang: "bash",
+  )
+]
+
+如果 `git cat-file` 失败，说明镜像尚未包含本书基准，不要用分支顶端的另一个 commit
+替代。本书工程也可以自动完成探测、克隆、LFS 回退与完整性检查：
+
+```bash
+$ scons init-blender --mirror=github
+$ scons init-blender --mirror=gitee
+$ scons init-blender --mirror-url=https://git.example.com/blender.git
+```
+
+`--mirror` 只改变新克隆的主仓库来源；平台预编译库与 Git LFS 数据仍来自
+`projects.blender.org`，已有的 `blender/` 检出也不会被悄悄更换远端。
+
+=== E.1.2 克隆到一半被中断，之后 git 好像坏了
 
 这是本书编写过程中真实遇到的情况，症状很有辨识度：
 
@@ -42,7 +128,7 @@ $ git submodule status
 
 修复后 `git submodule status` 会列出 `.gitmodules` 里的子模块（未初始化的前面带 `-`）。
 
-=== E.1.2 为什么 `git submodule update` 没有任何反应
+=== E.1.3 为什么 `git submodule update` 没有任何反应
 
 因为预编译库的子模块在 `.gitmodules` 里被显式标成了不自动更新：
 
@@ -67,7 +153,10 @@ $ git submodule update --init lib/windows_x64
 
 Windows 上的 `make.bat update` 与 macOS/Linux 上的 `make update` 会自动完成这套配置。
 
-=== E.1.3 我只想要源码，不想下几 GB 的测试数据
+=== E.1.4 我只想要源码，不想下几 GB 的测试数据
+
+如果还不清楚“Git 仓库里的指针”和“LFS 服务里的实体文件”是什么关系，先读 §2.2.1
+的「先理解 Git LFS」；下面只讨论哪些对象可以暂缓下载。
 
 主仓库自身的 Git LFS 内容里，*绝大多数是回归测试数据*，但不能因此跳过全部 LFS。
 构建真正需要的是：
@@ -84,15 +173,15 @@ Windows 上的 `make.bat update` 与 macOS/Linux 上的 `make update` 会自动�
 $ git lfs pull
 ```
 
-=== E.1.4 预编译库要下多久？能中途停吗
+=== E.1.5 预编译库要下多久？能中途停吗
 
 Windows 平台的库在 3 GB 量级，且大文件（例如 LLVM）传输很慢。源码里对这个阶段
 有一段明确的警告：第一次下载完成后，还会发生一次「看不出进度」的更大更新，
 可能超过一小时，*不要中断*。
 
 #tip[
-  最省时的做法是一次性让它跑完，然后不再想它。中途反复中断容易留下
-  E.1 第一节那种索引与锁文件的残留状态，反而更费时间。
+  最省时的做法是一次性等待它完成，然后不再想它。中途反复中断容易留下
+  E.1.2 那种索引与锁文件的残留状态，反而更费时间。
 ]
 
 验证库是否真的就绪，最可靠的方式是抽查几个关键依赖是否存在*实体文件*
@@ -105,7 +194,7 @@ $ Get-Content lib\windows_x64\python\...\python.exe -TotalCount 1
 
 如果第一行是 LFS 指针而不是二进制内容，说明该文件还没被还原。
 
-=== E.1.5 构建时报「找不到外部库」
+=== E.1.6 构建时报「找不到外部库」
 
 按顺序检查三件事：
 
@@ -161,10 +250,10 @@ CMake 把缓存写在构建目录里，改选项后必须让它重新配置。�
     align: (left, left),
     stroke: 0.4pt + luma(78%),
     table.header([*构建*], [*适用场景*]),
-    [`Release`（默认）], [日常使用、跑测试、截图。运行最快，但没有调试符号],
+    [`Release`（默认）], [日常使用、执行测试、截图。运行最快，但没有调试符号],
     [`debug`], [需要断点与单步调试时。体积大、运行慢，但符号完整],
     [`developer`], [开发时推荐：打开更多检查与开发者向默认选项],
-    [`lite`], [只要一个能跑的精简版本。编译时间明显更短],
+    [`lite`], [只要一个可以运行的精简版本。编译时间明显更短],
     [`full`], [需要全部可选功能时],
   ),
   caption: [构建类型的取舍],
@@ -221,7 +310,7 @@ $ blender --log "*,^operator"    # 除 operator 之外的全部
 
 不确定有哪些类别可用时，先 `--log-list-categories`。
 
-=== E.3.5 在没有界面的机器上跑
+=== E.3.5 在没有界面的机器上运行
 
 `--background` 是无界面模式。如果是要长期部署（例如渲染农场），可以构建
 `headless` 配置（#win `make.bat headless`，#mac #linux `make headless`），
@@ -241,7 +330,7 @@ Python 解释器会缓存已导入的模块。改完代码通常有两条路：
 
 #tip[
   如果你在频繁迭代，把插件代码写成一个*独立进程可测试*的形式（核心逻辑不依赖
-  `bpy`），用普通的 Python 测试跑它，只在最后验证与 Blender 的接线。这会省掉大量重启。
+  `bpy`），用普通的 Python 测试执行它，只在最后验证与 Blender 的接线。这会省掉大量重启。
 ]
 
 === E.4.2 插件卸载后还有残留

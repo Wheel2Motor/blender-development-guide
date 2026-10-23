@@ -51,7 +51,7 @@
   这些是用户级配置，属于 `AddonPreferences` 的正统用途。
 - *既有只读操作，也有修改操作*。检查本身不改数据，而"选中问题物体"改选择状态。
   这给了我们一个绝好的对照，用来讲清 `UNDO` 什么时候该加、什么时候不该加。
-- *不依赖任何其他 addon*，只用到 `bpy` 和 `bmesh`，读者照抄就能跑。
+- *不依赖任何其他 addon*，只用到 `bpy` 和 `bmesh`，读者照抄即可运行。
 
 项目定名为 *Mesh Inspector*，模块名 `mesh_inspector`。正文按主题拆解文件；
 可直接安装的完整项目随书提供。#example-file("ch07/mesh_inspector")
@@ -305,7 +305,7 @@ class MSI_OT_inspect(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        # poll 只回答"现在能不能跑"，不做实际工作，也不该有副作用。
+        # poll 只回答"现在是否允许执行"，不做实际工作，也不该有副作用。
         if context.mode != 'OBJECT':
             return False
         if context.scene is None:
@@ -575,7 +575,7 @@ Blender 会当作失败处理。
 
 #pitfall[
   `bpy.ops.mesh_inspector.inspect()` 这种脚本调用会*跳过 `invoke`，直接进 `execute`*，
-  但*一定会先跑 `poll`*。所以如果逻辑只写在 `invoke` 里，
+  但*一定会先调用 `poll`*。所以如果逻辑只写在 `invoke` 里，
   从脚本调用就会看到"什么都没发生"。把必要条件放 `poll`，
   把参数校验放 `execute`，才是稳的写法。
 ]
@@ -705,7 +705,7 @@ class MSI_Result(bpy.types.PropertyGroup):
   （7.2.2 里 `face_count=len(obj.data.polygons)`、
   `vert_count=len(obj.data.vertices)`）。这两个参数都是 `IntProperty`，
   位置又相邻，把面数传给顶点数参数不会有任何报错 ——
-  只会让报告里的顶点数一直显示成面数。这类"能跑但语义不对"的问题
+  只会让报告里的顶点数一直显示成面数。这类"可以执行但语义不对"的问题
   正是 7.4.6 要用单元测试兜住的东西。
 
 === 7.3.1 `bpy.props` 的参数名：以源码为准
@@ -1355,7 +1355,7 @@ addon_utils.paths()
 都跟着搬走，见 #src("source/blender/blenkernel/intern/appdir.cc:506")）；
 `BLENDER_USER_SCRIPTS` 只替换用户脚本目录
 （#src("source/blender/blenkernel/intern/appdir.cc:704")）。
-这两个变量在自动化测试里非常有用：起一个干净的 Blender 实例跑测试，
+这两个变量在自动化测试里非常有用：启动一个干净的 Blender 实例执行测试，
 不污染开发者自己的配置。
 
 === 7.4.3 扩展（extensions）与传统 addon 的差别
@@ -1483,7 +1483,7 @@ $ blender --command extension validate .
 
 #tip[
   即使你暂时不想发布到 extensions.blender.org，也建议用
-  `--command extension validate` 跑一遍。它会把清单字段的类型、
+  执行一遍 `--command extension validate`。它会把清单字段的类型、
   命名约束、版本格式全部检查一遍，比在 Blender 界面里看到
   "安装失败"再去猜要快得多。
 ]
@@ -1524,7 +1524,7 @@ $ blender --command extension validate .
 
 1. `bl_info` 的 `version` 已递增，`blender` 下限与实测一致；
 2. `unregister()` 干净：禁用后 `bpy.types.Scene` 上没有 `msi_result` 残留；
-3. 至少 Windows 与 Linux 各跑过一遍，特别注意路径分隔符与文本编码；
+3. 至少在 Windows 与 Linux 上各测试一遍，特别注意路径分隔符与文本编码；
 4. zip 结构正确：打开压缩包第一层只有一个目录；
 5. 走扩展的话，`blender --command extension validate .` 零错误；
 6. 报告里不包含用户机器的绝对路径（除非用户自己指定）；
@@ -1650,7 +1650,7 @@ def unregister():
 
 #pitfall[
   判断"卸载是否干净"有一个可执行的检查清单。禁用 addon 之后，
-  在 Python 控制台里跑：
+  在 Python 控制台里执行：
 
   ```python
   import bpy
@@ -1750,7 +1750,7 @@ print(bpy.context.mode)
     [`context.area` / `context.active_object` 是否未判空],
     [`ValueError: ... already registered`],
     [同一个类注册了两次],
-    [`unregister` 是否真的跑过；`bl_rna` 是否残留],
+    [`unregister` 是否确实执行；`bl_rna` 是否残留],
     [`TypeError: PointerProperty(...) expected ...`],
     [目标不是 `PropertyGroup` / `ID`],
     [见 #src("source/blender/python/intern/bpy_props.cc:5516") 的检查],
@@ -1831,7 +1831,7 @@ assert degenerate_face_count_pure(areas, 1e-6) == (2, 1e-9)
   这一节列的六个问题里，前四个（重载、卸载残留、属性定义不可改、
   上下文依赖）占了实际开发中八成的时间。它们的共同点是：
   *报错信息不会直接告诉你原因*。所以真正有用的不是记住报错，
-  而是记住这四条对应的检查动作 —— 重启、手动跑卸载清单、
+  而是记住这四条对应的检查动作 —— 重启、手动逐项执行卸载检查、
   确认改的是不是属性定义、手动调 `poll`。
 ]
 

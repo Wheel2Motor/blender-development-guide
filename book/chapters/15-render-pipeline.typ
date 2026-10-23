@@ -134,7 +134,7 @@
 - *`r` 是 `RenderData` 的*值拷贝*，不是指针*。
   `RenderData` 是场景里那份渲染设置（分辨率、帧率、输出格式……）。
   拷贝一份的原因是：*渲染过程中用户可以继续改场景，但这一次渲染必须用
-  一开始的设置跑完*。快照本体就写在
+  一开始的设置完成*。快照本体就写在
   #src("source/blender/render/intern/pipeline.cc:1948")
   （`RenderData rd = dna::shallow_copy(scene->r);`；同函数里
   "Ugly global still..." 那段注释讲的是 `G.is_rendering`，
@@ -626,8 +626,8 @@ bool RE_engine_render(Render *re, bool do_all)
 
 *第一，`draw_lock` 锁的是界面绘制。*
 `re->display->draw_lock()` 锁住界面绘制，目的是"防止用户在引擎读场景数据时
-改动场景"。所以引擎的 `update()` 回调在锁里跑，
-而 `render()` 回调在锁外跑 —— 后者可能耗时几分钟，
+改动场景"。所以引擎的 `update()` 回调在锁内执行，
+而 `render()` 回调在锁外执行 —— 后者可能耗时几分钟，
 不能一直霸占界面。
 
 *第二，`RE_ENGINE_CAN_DRAW` 标志控制绘制时机。*
@@ -1001,7 +1001,7 @@ const rcti *RE_engine_get_current_tiles(Render *re, int *r_total_tiles)
 #summary[
   §15.1–§15.2 的要点：
   *`render/` 只提供框架，不提供算法*。它做的是快照设置、建渲染专用依赖图、
-  遍历视图层、调引擎回调、合并分块、跑合成器、写文件。
+  遍历视图层、调用引擎回调、合并分块、执行合成器、写文件。
   *`do_render_full_pipeline()` 有三个分支*，优先级是
   外部引擎 → 序列器 → 合成器。
   *`RE_engine_render()` 返回 `false` 的意思是"我不接管全流程"，不是失败*。
@@ -1217,7 +1217,7 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
 *这四十行是整个"自定义渲染引擎"功能的全部机制。*
 逐条读：
 
-1. *先用一个 dummy 引擎跑 `validate`*。Python 类上声明的
+1. *先用一个 dummy 引擎执行 `validate`*。Python 类上声明的
    `bl_use_*` 属性会被写进 `dummy_et`（`dummy_engine.type = &dummy_et`）。
    这解释了为什么 §15.3.2 那些 `bl_use_* = True` 能生效。
 2. *`have_function[]` 数组是"这个 Python 类实现了哪些方法"的位图*。
@@ -1294,7 +1294,7 @@ static PyObject *create_func(PyObject * /*self*/, PyObject *args)
   它可能是 Python 侧的接口不匹配（例如 Blender 版本升级后
   `bpy.types.RenderEngine` 的某个方法签名变了），
   而不是渲染内核出错。排查顺序应该是：
-  先用纯 Python 引擎跑一遍最小场景，确认框架侧没问题，
+  先用纯 Python 引擎渲染一遍最小场景，确认框架侧没问题，
   再怀疑原生侧。
 ]
 
@@ -1539,7 +1539,7 @@ void Instance::draw_viewport()
 == 15.5 合成器
 
 合成器在管线里的位置是"引擎之后、写盘之前"（@fig-render-pipeline 的第 ④ 阶段）。
-它的职责是把渲染结果当作输入，跑一遍节点树，产出最终图像。
+它的职责是把渲染结果当作输入，执行一遍节点树，产出最终图像。
 
 === 15.5.1 两个合成器
 
@@ -1593,7 +1593,7 @@ void RE_compositor_free(Render &render);
 *注释里那一句是关键*："The input and output of this is pre-existing
 `RenderResult` buffers in scenes, that are *uploaded to and read back from the GPU*."
 也就是说：*渲染合成器是 GPU 实现*，它把 `RenderResult` 里的像素上传到 GPU，
-跑完节点树之后再读回 CPU 的 `RenderResult`。
+完成节点树计算之后再读回 CPU 的 `RenderResult`。
 这个"上传 - 计算 - 回读"的模式决定了它的性能特征，
 也解释了为什么它需要一个专门的 GPU 上下文。
 
@@ -1716,11 +1716,11 @@ static bool compositor_needs_render(Scene *scene)
 
 `needed_outputs` 是一个位掩码，告诉合成器"这一次需要哪些输出节点真的执行"。
 *后台渲染时会把 Viewer 与 Node Previews 去掉* ——
-这两者只是给界面看的，后台跑它们纯属浪费。
+这两者只是给界面看的，后台执行它们纯属浪费。
 这是一个很典型的"渲染代码里到处都有 `if (!G.background)`"的例子。
 
 `FileOutput` 节点的写盘被推迟到最后一步
-（`save_file_outputs()`），原因是它需要知道所有视图都跑完了。
+（`save_file_outputs()`），原因是它需要知道所有视图都处理完成了。
 注释在 `RenderData` 的定义处也有呼应：
 "When rendering an animation, saving files is required"（#src("source/blender/render/RE_pipeline.h:484")）。
 
@@ -1917,7 +1917,7 @@ if __name__ == "__main__":
   这正是 §15.4.3 里 EEVEE 那处 TODO 说的同一件事。
 - *`bl_use_postprocess = False`* 很关键：它让 `RE_engine_render()` 在
   `do_all == true`（全流程）时返回真，也就是"这个引擎接管到底"。
-  如果设成 `True`，框架会在引擎之后继续跑合成器 ——
+  如果设成 `True`，框架会在引擎之后继续执行合成器 ——
   那时你的结果是合成器的输入而不是最终图像。
 
 #warn[
@@ -1927,7 +1927,7 @@ if __name__ == "__main__":
   也就是 `bl_use_postprocess == !(type->flag & RE_USE_POSTPROCESS)`。
   所以*置上 `RE_USE_POSTPROCESS` 才等价于 Python 侧的
   `bl_use_postprocess = False`* —— 这一位的含义是"引擎接管到底，
-  框架不再跑合成器"。
+  框架不再执行合成器"。
   判定逻辑有两条（#src("source/blender/render/intern/engine.cc:1014")）：
 
   ```cpp

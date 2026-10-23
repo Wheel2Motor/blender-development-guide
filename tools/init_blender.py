@@ -28,7 +28,7 @@
     python tools/init_blender.py --check-only      # 只检查，不克隆不下库（缺必需项则非零退出）
     python tools/init_blender.py --src DIR         # 指定源码目录（默认 ./blender）
     python tools/init_blender.py --mirror github   # 从 GitHub 官方镜像克隆
-    python tools/init_blender.py --mirror gitee    # 从 Gitee 镜像克隆（第三方同步）
+    python tools/init_blender.py --mirror gitee    # 从 Gitee（码云）国内同步镜像克隆
     python tools/init_blender.py --mirror-url URL  # 用任意镜像地址（自建、公司内网）
     python tools/init_blender.py --retries 30 --retry-delay 20   # 网络差时放宽重试
 
@@ -75,9 +75,9 @@ MIRRORS = {
     # https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/#github-mirror
     # 它不含本仓库的 Git LFS 对象，所以克隆时必须跳过 smudge（见 ensure_source）。
     "github": "https://github.com/blender/blender.git",
-    # 第三方镜像（Gitee 上并没有 Blender 官方镜像）。mirrors/blender 由 Gitee 的 mirrors
-    # 组织同步，核对时带有 blender-v5.2-release 与 v5.2.2；但它终究是别人同步的，
-    # 所以 ensure_source 会在克隆前后都核对基准分支与 commit，落后就明确失败。
+    # Gitee（码云）国内代码托管平台上的同步镜像。中国大陆网络通常更值得优先尝试，
+    # 但同步进度可能落后，所以 ensure_source 会在克隆前后都核对基准分支与 commit，
+    # 未包含本书基准时明确失败。
     # 另一个已知镜像 blender_5/blender 停在 blender-v5.0-release，不能用于本基准。
     "gitee": "https://gitee.com/mirrors/blender.git",
 }
@@ -1209,7 +1209,7 @@ def main() -> int:
                     help="source directory (default: ./blender)")
     ap.add_argument("--mirror", choices=sorted(MIRRORS), default=DEFAULT_MIRROR,
                     help="where a new clone comes from: official (default), github "
-                         "(official mirror) or gitee (third-party mirror)")
+                         "(official mirror) or gitee (mainland China mirror)")
     ap.add_argument("--mirror-url",
                     help="override the mirror clone URL, e.g. a self-hosted mirror")
     ap.add_argument("--retries", type=int, default=RETRIES,

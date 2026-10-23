@@ -967,7 +967,7 @@ void WM_main_add_notifier(uint type, void *reference)
 
 紧接着，`wm_event_do_refresh_wm_and_depsgraph()`
 （#src("source/blender/windowmanager/intern/wm_event_system.cc:545")）
-先跑编辑器的刷新回调，再调用 `wm_event_do_depsgraph(C, false)`：
+先执行编辑器的刷新回调，再调用 `wm_event_do_depsgraph(C, false)`：
 
 ```cpp
 // source/blender/windowmanager/intern/wm_event_system.cc:545（节选）

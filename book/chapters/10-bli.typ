@@ -1699,10 +1699,10 @@ template<class T> inline constexpr bool _bli_always_false = false;
 
   1. *断言不是错误处理。* `BLI_assert` 表达的是"这是程序员的错，
      不该发生"；用户能触发的非法输入必须走 `BKE_report` 之类。
-     把用户输入校验写成 `BLI_assert`，发布版里就会静默带着坏数据继续跑。
+     把用户输入校验写成 `BLI_assert`，发布版里就会静默带着坏数据继续运行。
   2. *`BLI_assert` 里的表达式在 release 会被删掉。*
      `BLI_assert(do_something())` 是 bug。
-  3. *默认不 abort。* 如果你在调试一个"断言刷屏但程序继续跑"的问题，
+  3. *默认不 abort。* 如果你在调试一个"断言刷屏但程序继续运行"的问题，
      那不是断言没生效，而是 `WITH_ASSERT_ABORT` 没开。
 ]
 

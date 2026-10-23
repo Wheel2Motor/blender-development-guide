@@ -133,7 +133,7 @@ source/blender/blenkernel/BKE_collection.hh
 === 8.1.3 前缀的三条退化规则
 
 如果"前缀 = 模块"永远成立，这一节就不必写了。可惜 5.x 的代码库里
-至少有三种偏离，不知道它们会让你的 grep 白跑。
+至少有三种偏离，不知道它们会让你的 grep 白费力气。
 
 *规则一：新模块把前缀留在文件名里，函数改用命名空间。*
 
@@ -254,7 +254,7 @@ blo_read_file_internal(
     [某个数据类型的行为（对象、网格、材质…）], [`blenkernel/`（`BKE_`）],
     [界面上的按钮、面板、菜单、快捷键行为], [`editors/` + `windowmanager/`（`ED_` / `WM_`）],
     [视口绘制、着色器、GPU 后端], [`draw/` + `gpu/`（`DRW_` / `GPU_`）],
-    [数据求值顺序、缓存失效、修饰器何时跑], [`depsgraph/`（`DEG_`）],
+    [数据求值顺序、缓存失效、修饰器何时执行], [`depsgraph/`（`DEG_`）],
     [图像读写、色彩管理], [`imbuf/`（`IMB_`）+ `blenkernel` 里的色彩代码],
     [渲染管线、渲染引擎注册], [`render/`（`RE_`）+ `editors/render/`],
     [`.blend` 的读写格式、旧文件兼容], [`blenloader/`（`BLO_`）+ `makesdna/`],
@@ -464,7 +464,7 @@ void long_function_name(int parameter_one,
 `indent_size = 2`，Python 则是 `indent_size = 4`、`max_line_length = 120`。
 换句话说，*同一个仓库里 C++ 和 Python 的行宽上限是不同的*。
 
-=== 8.2.4 格式化怎么跑
+=== 8.2.4 怎样执行格式化
 
 Blender 提供的入口是 `make format`：
 
@@ -899,7 +899,7 @@ source/blender/makesdna/DNA_space_types.h:...:  V3D_RENDER_BORDER = ...
 ]
 
 #pitfall[
-  *易错点 2：忘记排除生成目录。*  在仓库根目录跑 `grep -r` 会把
+  *易错点 2：忘记排除生成目录。*  在仓库根目录执行 `grep -r` 会把
   `lib/`（预编译依赖，可能上 G）一起扫一遍，慢到怀疑人生。
   用 `git grep` 而不是 `grep -r` —— 它只搜受版本控制的文件，
   自动跳过 `lib/`、构建目录和 `.git`。
@@ -930,6 +930,6 @@ source/blender/makesdna/DNA_space_types.h:...:  V3D_RENDER_BORDER = ...
 
   *练习 8.4（格式与风格）。*  随便找一个 `.hh` 文件，故意破坏格式
   （把某个函数参数改成一个一行、把缩进改成 4 空格、删掉 `// namespace`），
-  然后跑 `make format PATHS="<你改的目录>"`，观察 `git diff` 里
+  然后执行 `make format PATHS="<你改的目录>"`，观察 `git diff` 里
   clang-format 具体修了什么。这是理解 `.clang-format` 最快的方式。
 ]

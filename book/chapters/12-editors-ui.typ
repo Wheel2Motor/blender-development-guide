@@ -163,7 +163,7 @@ struct SpaceType {
   void (*refresh)(const bContext *C, ScrArea *area);
   SpaceLink *(*duplicate)(SpaceLink *sl);
 
-  /* 启动时各跑一次的注册期回调 */
+  /* 启动时各执行一次的注册期回调 */
   void (*operatortypes)();
   void (*keymap)(wmKeyConfig *keyconf);
   void (*dropboxes)();
@@ -274,7 +274,7 @@ struct ARegionType {
 
 `layout` 与 `draw` 的分工是编辑器 UI 的关键：`layout` 只*构建按钮结构*
 （创建 `ui::Block` / `uiBut`），`draw` 才*渲染像素*。分开是为了让布局结果可缓存 ——
-鼠标 hover 高亮不必重跑 `layout`。几乎所有"面板型"区块都直接把这两个回调指到框架：
+鼠标 hover 高亮不必再次执行 `layout`。几乎所有"面板型"区块都直接把这两个回调指到框架：
 
 ```cpp
 /* source/blender/editors/space_spreadsheet/space_spreadsheet.cc:842（节选） */
@@ -419,12 +419,12 @@ void BKE_spacetype_register(std::unique_ptr<SpaceType> st)
 ```
 
 这解释了 `SpaceType::operatortypes` 的注释为什么写 "Register operator types on
-startup"（#src("source/blender/blenkernel/BKE_screen.hh:132")）—— 它只在启动时跑一次。
+startup"（#src("source/blender/blenkernel/BKE_screen.hh:132")）—— 它只在启动时执行一次。
 
 #pitfall[
   `SpaceType` 的回调分两类：*注册期回调*（`operatortypes` / `keymap` / `dropboxes` /
-  `gizmos`）在启动时各跑一次；*运行期回调*（`create` / `init` / `listener` /
-  `refresh` / `blend_write` 等）在对应事件发生时跑。把需要每帧更新的逻辑写进
+  `gizmos`）在启动时各执行一次；*运行期回调*（`create` / `init` / `listener` /
+  `refresh` / `blend_write` 等）在对应事件发生时执行。把需要每帧更新的逻辑写进
   `operatortypes`，它永远不会执行第二次。
 ]
 
@@ -519,7 +519,7 @@ Blender #blender-version 里 `BKE_spacetype_register(std::move(st))` 恰好 19 �
     stroke: 0.4pt + luma(78%),
     table.header([*函数*], [*行号*], [*作用*]),
     [`ED_region_panels_init`], [108], [区块初始化：建立 `ui::Block` 容器与滚动状态],
-    [`ED_region_panels_layout`], [135], [跑所有 `PanelType::poll` 与 `draw_header`，生成布局],
+    [`ED_region_panels_layout`], [135], [执行所有 `PanelType::poll` 与 `draw_header`，生成布局],
     [`ED_region_panels_draw`], [136], [把上一步的布局渲染出来],
     [`ED_region_header_init`], [138], [头部区块初始化],
     [`ED_region_header`], [139], [一步完成头部的布局 + 绘制],

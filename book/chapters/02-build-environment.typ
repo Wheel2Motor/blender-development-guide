@@ -259,77 +259,81 @@ Blender 官方仓库在 `projects.blender.org`。要拿到本书的核对基准�
 其中 `BLENDER_VERSION_SUFFIX` 为 `LTS`）。行号对应这一版；
 你的版本如果不同，请以同名符号为准检索。
 
-==== 从镜像获取源码：先探测，再下载
+#tip[
+  本章正文只使用 Blender 官方主仓库，确保命令与官方文档及 Git LFS 服务保持一致。
+  如果所在网络连接官方仓库不稳定，可以改用镜像；中国大陆网络环境通常值得优先尝试
+  Gitee（码云）上的国内同步镜像。镜像地址、同步状态核验与 LFS 回退流程见附录 E.1.1。
+]
 
-主仓库有三个常见来源，但它们的职责并不相同：
+#pagebreak(weak: true)
 
-- `https://projects.blender.org/blender/blender.git` 是官方主仓库，也是 Git LFS 对象的权威来源。
-- `https://github.com/blender/blender.git` 是 Blender 官方维护的 GitHub 镜像，适合官方 Git 服务连接不稳定时使用。
-- `https://gitee.com/mirrors/blender.git` 是 Gitee `mirrors` 组织维护的第三方镜像，不是 Blender 官方镜像，发布分支的同步进度可能落后。
+==== 先理解 Git LFS：Git 里存指针，LFS 服务存实体
 
-镜像通常只解决 Git 对象的下载，不保证托管主仓库的 LFS 对象；镜像地址和分支状态也会变化。
-因此不要直接开始数 GiB 的克隆，先用轻量命令确认目标分支仍然存在：
+如果你过去主要使用 SVN，只会 Git 的 `clone`、`pull`、`commit` 等基本操作，
+这里很容易产生误解。*Git LFS（Large File Storage）不是另一个源码仓库，也不是 Git
+子模块*；它是 Git 的大文件扩展。普通 Git 很适合保存源码和文本差异，却不适合在每次提交中
+直接塞入不断变化的巨大二进制文件。Git LFS 因而把一个大文件拆成两部分：
 
-#raw(
-  "$ git ls-remote --exit-code --heads <镜像 URL> " + blender-branch,
-  block: true,
-  lang: "bash",
-)
+#figure(
+  kind: table,
+  table(
+    columns: (1.05fr, 1.75fr),
+    inset: 6pt,
+    align: (left, left),
+    stroke: 0.4pt + luma(78%),
+    table.header([*位置*], [*实际保存的内容*]),
+    [Git 仓库的 commit / tree],
+    [文件路径和一小段 LFS 指针文本；指针记录实体文件的 SHA-256 标识与字节数],
+    [远端 Git LFS 服务],
+    [真正的 `.blend`、图片、测试文件、预编译库等二进制字节],
+    [本机 Git 元数据目录下的 `lfs/objects/`],
+    [已经下载的 LFS 实体文件缓存；重试和切换分支时可以复用已完成的对象],
+    [本机工作区],
+    [正常情况下是可直接使用的实体文件；未下载成功或主动跳过还原时才会露出指针文本],
+  ),
+  caption: [Git 仓库、LFS 服务、本地缓存与工作区的关系],
+) <tbl-git-lfs-storage>
 
-命令成功只说明镜像公开了这个分支，不能证明本书固定的 commit 一定已同步过去；完整提交号要在克隆后用 `git cat-file` 再核一次。
-如果 `ls-remote` 没有输出或返回非零状态，就在下载前换回官方仓库或另一个镜像。
+Git 仓库里保存的不是一个含糊的“下载地址”，而是规范化的三行指针。例如一个
+12,345 字节的文件在 commit 中可能对应：
 
-已经安装 Git LFS 时，直接从不提供 LFS 对象的镜像执行 `git clone`，可能在 Git 对象下载完以后才在 checkout 的 smudge 阶段失败。
-稳妥做法是先跳过 smudge，待固定版本检出后再显式从官方 LFS 远端恢复文件。
-#linux 与 #mac 的 shell 写法如下：
-
-#raw(
-  "$ export GIT_LFS_SKIP_SMUDGE=1\n"
-  + "$ git clone --branch " + blender-branch + " \\\n"
-  + "    --single-branch <镜像 URL> blender\n"
-  + "$ unset GIT_LFS_SKIP_SMUDGE",
-  block: true,
-  lang: "bash",
-)
-
-#win 的 PowerShell 写法只是在环境变量语法上不同：
-
-#raw(
-  "$env:GIT_LFS_SKIP_SMUDGE = \"1\"\n"
-  + "git clone --branch " + blender-branch + " `\n"
-  + "  --single-branch <镜像 URL> blender\n"
-  + "Remove-Item Env:GIT_LFS_SKIP_SMUDGE",
-  block: true,
-  lang: "powershell",
-)
-
-克隆结束后，下面这组命令先确认固定 commit 存在，再检出标签，并把官方仓库登记为 LFS 回退远端。
-`git lfs pull <远端>` 会为当前检出的版本下载缺失对象并更新工作树：
-
-#raw(
-  "$ cd blender\n"
-  + "$ git cat-file -e " + blender-commit + "^{commit}\n"
-  + "$ git switch --detach " + blender-tag + "\n"
-  + "$ git remote add lfs-fallback \\\n"
-  + "    https://projects.blender.org/blender/blender.git\n"
-  + "$ git config lfs.remote.searchall true\n"
-  + "$ git lfs pull lfs-fallback\n"
-  + "$ git rev-parse HEAD\n"
-  + blender-commit,
-  block: true,
-  lang: "bash",
-)
-
-如果 `git cat-file` 失败，说明镜像尚未包含本书基准；不要用镜像分支顶端的另一个 commit 冒充，应该换源重新克隆。
-在本书工程中可以把上述探测、跳过 smudge、LFS 回退和完整性检查交给统一入口：
-
-```bash
-$ scons init-blender --mirror=github
-$ scons init-blender --mirror=gitee
-$ scons init-blender --mirror-url=https://git.example.com/blender.git
+```text
+version https://git-lfs.github.com/spec/v1
+oid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393
+size 12345
 ```
 
-`--mirror` 只切换主仓库的克隆来源，不改变预编译库子模块和 LFS 对象的权威来源；已有 `blender/` 检出也不会被它悄悄换远端。
+`oid` 是实体内容的 SHA-256 标识；内容一变，`oid` 就会变，所以 Git 的 commit 仍能精确
+固定“这个路径在这一版应该对应哪个大文件”。指针格式和过滤过程见
+#weblink("https://github.com/git-lfs/git-lfs/blob/main/docs/spec.md", label: [Git LFS 官方规范])。
+
+可以把它与 SVN 做一个近似比较：SVN 用户通常认为“版本记录和文件实体都从同一个仓库的
+`checkout` / `update` 得到”；Git LFS 则把它拆成*先取 Git 历史与指针，再按指针取大文件
+实体*两次传输。安装 Git LFS 后，这两步通常被过滤器自动串起来，所以一次 `git clone`
+看起来仍像拿到了完整文件：checkout 遇到指针时，`smudge` 过滤器从 LFS 服务下载实体并
+放进工作区。若使用 `GIT_LFS_SKIP_SMUDGE=1` 跳过这一步，工作区里暂时只剩指针；随后执行
+`git lfs pull`，才会下载当前版本需要的对象并把指针替换为实体文件。Git LFS 官方手册也把
+这种关系概括为“Git 仓库存指针，LFS 服务存内容”
+（#weblink("https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs.adoc", label: [git-lfs(1)])）。
+
+在本书固定的 Blender commit 中，主仓库当前版本共有 6,671 个 LFS 路径：
+
+- 6,311 个位于 `tests/files/`，是图像、模型、音视频等回归测试输入与期望结果；
+- 197 个位于 `release/datafiles/`，包括启动文件、预览文件、图标数据、ICC 配置和字体源文件；
+- 137 个位于 `release/windows/`，主要是 Windows 安装包与 MSIX 使用的图形资源；
+- 其余 26 个分布在 `assets/`、`release/darwin/`、`scripts/startup/` 和文档资源中，
+  包括内置画笔、节点资产与应用模板。
+
+这里还要把两个容易混淆的层次彻底分开：
+
+- Blender 的 C/C++、Python、CMake 等源码绝大多数是*普通 Git 文件*；LFS 不是源码的另一份副本。
+- `lib/<平台>_<架构>` 是*独立 Git 仓库组成的子模块*。主仓库只记录每个子模块应检出的
+  commit，类似 SVN 使用者熟悉的 `svn:externals`；进入子模块以后，其中庞大的静态库、
+  动态库、SDK 与工具又由该子模块自己的 Git LFS 管理。
+
+因此一次完整的 Blender 初始化同时涉及三件事：克隆主源码仓库、还原主仓库的 LFS 文件、
+检出本机平台的 `lib/` 子模块并还原它自己的 LFS 文件。只完成第一件事，目录看似完整，
+实际上还不能可靠构建。
 
 === 2.2.2 四个预编译库子模块
 
@@ -389,7 +393,7 @@ Python 脚本；只更新代码、不动预编译库则是 `make update_code`，
    （#src("build_files/utils/make_update.py:157-160")），把远端地址从
    `projects.blender.org` 换成 `git.blender.org`
    （#src("build_files/utils/make_update.py:163-177")），
-   并设置 LFS 回退远端 `lfs-fallback`，用于从第三方镜像克隆但缺少 LFS 对象的情况
+   并设置 LFS 回退远端 `lfs-fallback`，用于从镜像克隆但缺少 LFS 对象的情况
    （#src("build_files/utils/make_update.py:639-664")）。
 2. *更新主仓库*：当前分支有上游就走 `fetch upstream` + `merge --ff-only`，
    否则 `git pull --rebase`；最后对主仓库补一次 `git lfs pull`
@@ -472,9 +476,10 @@ $ scons init-blender --retries=0  # 关闭重试，首次失败就退出
 
 === 2.2.5 主仓库自己的 LFS：测试数据为主，也包含构建资源
 
-这里有一个非常常见的误解需要澄清。当你执行 `git lfs pull`（或第一次克隆）
-时，Blender 主仓库会拉取大量 LFS 对象。*绝大多数*位于 `tests/files/`，供回归测试
-使用；但主仓库 LFS 并不只包含测试数据。固定基准中，`release/datafiles/` 也有
+前面已经解释了 LFS 的存储关系与路径分布，这里只回答“哪些实体文件会影响构建”。
+当你执行 `git lfs pull`（或第一次克隆触发 LFS 过滤）时，Blender 主仓库会拉取大量
+LFS 对象。*绝大多数*位于 `tests/files/`，供回归测试使用；但主仓库 LFS 并不只包含
+测试数据。固定基准中，`release/datafiles/` 也有
 `startup.blend`、预览文件、图标数据与字体源文件等 LFS 对象，其中一部分是构建和
 运行所必需的。
 
@@ -509,13 +514,9 @@ de873a2094 * assets/brushes/essentials_brushes-curve_sculpt.blend
 ```
 
 OID 后面的 `*` 表示工作树中是完整对象，`-` 表示仍是 LFS 指针；检查时不应出现任何 `-` 记录。
-需要人工确认可疑文件时，LFS 指针通常只有一百多字节，第一行固定为：
-
-```text
-version https://git-lfs.github.com/spec/v1
-```
-
-体积很小和这行文件头要同时看，因为“小文件”本身不一定是指针。
+需要人工确认可疑文件时，LFS 指针通常只有一百多字节，并以本节前面展示的三行格式开头。
+体积很小和 `version https://git-lfs.github.com/spec/v1` 文件头要同时看，因为“小文件”
+本身不一定是指针。
 预编译库子模块也要在自己的仓库目录执行同样的 `git lfs ls-files` 检查，不能只核对主仓库。
 在本书工程里，下面的只读检查会遍历主仓库和当前平台库的全部 LFS 路径，不下载或修改文件：
 
@@ -523,7 +524,9 @@ version https://git-lfs.github.com/spec/v1
 $ scons init-blender --check-only
 ```
 
-本节可以压成一句话：*`git clone` 只拿到 Git 工作树；`make update`（#win 是 `make.bat update`）负责补齐主仓库 LFS 与本机平台库；开始配置前还要按 LFS 清单全量核对。*
+本节可以压成一句话：*`git clone` 先取得 Git 历史与 LFS 指针；已安装 Git LFS 时，
+checkout 通常会自动还原实体文件，`make update`（#win 是 `make.bat update`）则负责确保
+主仓库 LFS 与本机平台库都已补齐；开始配置前还要按 LFS 清单全量核对。*
 库目录缺失会表现为 `Unable to find LIBDIR`（#linux）或 `Mac OSX requires pre-compiled libs`（#mac），`startup.blend` 未恢复会触发三平台通用的 `Detected incomplete startup blend`，其余 LFS 缺口则未必能在配置阶段被发现。
 
 == 2.3 Windows 构建
@@ -1506,7 +1509,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS     ON  CACHE BOOL "" FORCE)
   这一章的要点可以压缩成五句话：
 
   1. *入口不同*：#win 用 `make.bat`，其余用 `make`；`GNUmakefile` 明确拒绝 Windows。
-  2. *镜像只替换主仓库的 Git 来源，不替代官方 LFS*；依赖靠 Git LFS 子模块而不是 SVN，
+  2. *预编译依赖通过 Git 子模块引用，子模块中的大文件再由 Git LFS 管理，而不是 SVN*；
+     网络不稳定时可以改用镜像，但镜像不替代官方 LFS，
      下载中断后可以续传，但必须按 `git lfs ls-files` 全量核对。
   3. *三平台用同一套 CMake 工程与同一批 `build_files/cmake/config/*.cmake` 档位*，
      差异只在生成器、编译器、产物形态与系统依赖。

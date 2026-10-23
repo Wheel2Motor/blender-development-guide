@@ -26,7 +26,7 @@
   再启用"拿到的仍是旧模块对象。图中每一条断言都能在
   #src("scripts/modules/addon_utils.py") 里找到对应行，逐条出处见本节正文。
   左侧蓝色虚线是"再启用"的回路：它直接回到第 ④ 步 `register()`，第 ③ 步的模块
-  导入不会重跑。
+  导入不会再次执行。
 ]) <fig-addon-lifecycle>
 
 === 4.1.1 bl_info 的约束与注册函数的配对
@@ -1483,7 +1483,7 @@ static const char arg_handle_python_exit_code_set_doc[] =
 对脚本编辑器里手敲的代码无效。默认值是 0（禁用），所以不加这个开关时
 Python 出错也只会在终端里打印一行 traceback，进程仍然返回 0。
 
-=== 4.4.2 官方测试是怎么跑的
+=== 4.4.2 官方测试是怎样执行的
 
 Blender 自己的 Python 测试放在 `tests/python/`，由 CMake 注册成 CTest。
 统一的命令行参数定义在 #src("tests/CMakeLists.txt:56")：
@@ -1538,7 +1538,7 @@ add_blender_test(
 
 以及"启用→禁用→重载→再启用"的顺序组合
 （#src("tests/python/bl_load_addons.py:85")）。*这个测试是最省事的
-addon 冒烟测试*：把自己的 addon 放进去跑一遍，能挡住大部分
+addon 冒烟测试*：把自己的 addon 放进去执行一遍，能挡住大部分
 "禁用后残留""重载后重复注册"的问题。
 
 === 4.4.3 给自己的 addon 写单元测试
@@ -1726,7 +1726,7 @@ Python 层的错误都会带 traceback，但有两类问题不会：
   $ blender --background --factory-startup --python-exit-code 1 --python my_test.py
   ```
 
-  跑通它。然后故意在 `register()` 里抛一个异常，确认进程返回非零退出码。
+  成功执行它。然后故意在 `register()` 里抛一个异常，确认进程返回非零退出码。
   最后把 `addon_utils.enable()` 的返回值用起来，验证它在失败时返回 `None`
   （依据 #src("scripts/modules/addon_utils.py:355") 的文档字符串：
   "the loaded module or None on failure"）。

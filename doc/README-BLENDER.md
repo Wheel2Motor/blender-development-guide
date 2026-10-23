@@ -92,7 +92,7 @@ SCons 的自定义参数必须写成 `--opt=value`，空格分隔会被 SCons �
 ```bash
 scons init-blender --mirror=official  # 默认：官方主仓库
 scons init-blender --mirror=github    # GitHub 官方镜像
-scons init-blender --mirror=gitee     # Gitee 第三方镜像（mirrors 组织同步）
+scons init-blender --mirror=gitee     # Gitee（码云）国内同步镜像
 scons init-blender --mirror-url="https://git.example.com/blender.git"
 ```
 
@@ -120,11 +120,10 @@ scons init-blender --retries=0                     # 关闭重试，失败即退
   [Clone & Update](https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/)
   的「GitHub Mirror」一节；已核对该镜像包含本项目基准提交
   `d13f752e3b9c4f8c261cda552b1021f8bcc0382c` 与标签 `v5.2.2`。
-- `gitee` 指向 `mirrors/blender`。Gitee 上 **没有 Blender 官方镜像**，这是 Gitee mirrors 组织
-  同步的第三方镜像；核对时它有 `blender-v5.2-release` 分支与 `v5.2.2` 标签，两者都指向与
-  官方相同的对象（标签就是基准 commit `d13f752e…`，且可从该镜像按 SHA 取到）。它的分支
-  顶端 SHA 与官方不同（`c361aec8…` 对 `fab76e95…`），因为同步状态由维护者决定；脚本核对
-  的是基准 **commit** 而不是分支顶端，所以这条差异不影响使用。
+- `gitee` 指向 `mirrors/blender`。Gitee（码云）是国内代码托管与协作开发平台；对中国大陆
+  网络环境而言，国内链路通常更短，在官方仓库或 GitHub 连接缓慢、频繁中断时值得优先尝试。
+  该地址是平台上的同步镜像，分支进度可能与 Blender 官方仓库存在时间差；脚本核对的是基准
+  **commit** 而不是把镜像分支顶端当成基准，因此同步差异不会被悄悄忽略。
   同平台上另有 `blender_5/blender`，它停在 `blender-v5.0-release`，不能用于本基准。
   脚本先用 `git ls-remote` 探测基准分支、克隆后再核 `git rev-parse HEAD`，落后时立刻失败
   并提示改用 `--mirror=official`，不会先下完约 1.5 GiB 的主仓库才发现白拉。
@@ -151,7 +150,7 @@ scons init-blender --retries=0                     # 关闭重试，失败即退
   `git lfs fetch` 补齐（`lfs.concurrenttransfers=32`，实测把
   `projects.blender.org` 从 0.43 MiB/s 提到 1.6 MiB/s；默认 8 个连接）。镜像还要先加
   `lfs-fallback` 远端并 `lfs checkout`。这与上游
-  `build_files/utils/make_update.py` 对第三方检出做的 `lfs_fallback_setup()` 一致。
+  `build_files/utils/make_update.py` 对非上游检出做的 `lfs_fallback_setup()` 一致。
   `build-blender` 在 configure 前再按同一套全量判据核对一次，指到 `init-blender` 而不是把
   上游的 `make update` 报错丢给读者。
 

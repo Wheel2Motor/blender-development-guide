@@ -74,7 +74,7 @@ init-blender options:
   --mirror=MIRROR       Where a NEW clone comes from (default: official):
                           official  projects.blender.org, the canonical repository
                           github    github.com/blender/blender, the official mirror
-                          gitee     gitee.com/mirrors/blender, a third-party mirror
+                          gitee     gitee.com/mirrors/blender, a mainland China mirror
                         Only the main repository changes hands: lib/ platform
                         libraries and the repository's Git LFS objects still come
                         from projects.blender.org. A mirror that lacks the pinned

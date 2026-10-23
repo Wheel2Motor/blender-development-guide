@@ -738,7 +738,7 @@ inline OperationNode *flush_schedule_children(OperationNode *op_node, FlushQueue
 ]
 
 flush 完成后，每个需要重算的 `OperationNode` 都带上了
-`DEPSOP_FLAG_NEEDS_UPDATE`；不需要的则没有。求值阶段就只跑带标记的节点。
+`DEPSOP_FLAG_NEEDS_UPDATE`；不需要的则没有。求值阶段就只执行带标记的节点。
 
 === 13.3.4 计数式拓扑排序
 
@@ -834,7 +834,7 @@ void schedule_node(DepsgraphEvalState *state,
 注意 `atomic_sub_and_fetch_uint32` 与 `atomic_fetch_and_or_uint8` ——
 *计数与去重都是原子操作*，因为多个线程会同时减同一个节点的计数。
 这是"计数式拓扑排序"能在多线程下工作的关键：不需要全局排序，
-每个节点自己的状态就足以决定"能不能跑"。
+每个节点自己的状态就足以决定"是否具备执行条件"。
 
 还有两处性能优化值得注意：
 
@@ -851,7 +851,7 @@ void schedule_node(DepsgraphEvalState *state,
 
 求值的总入口是 `deg_evaluate_on_refresh()`
 （#src("source/blender/depsgraph/intern/eval/deg_eval.cc:420")）。
-它先把 `entry_tags` 是否为空作为快速退出条件，然后依次跑四个阶段：
+它先把 `entry_tags` 是否为空作为快速退出条件，然后依次执行四个阶段：
 
 ```cpp
 /* source/blender/depsgraph/intern/eval/deg_eval.cc:61 */
@@ -924,12 +924,12 @@ enum class EvaluationStage {
 
 四个阶段的设计意图：
 
-1. *`COPY_ON_EVAL` 先跑*，因为它*永远不会形成环*（它只是"复制自己"），
+1. *先执行 `COPY_ON_EVAL`*，因为它*永远不会形成环*（它只是"复制自己"），
    所以能保证后面的操作看到的求值数据"至少是合法的"—— 可能还没算完，
    但指针有效、结构完整。这是把环的破坏性降到最低的巧妙做法。
-2. *`DYNAMIC_VISIBILITY` 只在有动态可见性时才跑*
+2. *`DYNAMIC_VISIBILITY` 只在有动态可见性时才执行*
    （`has_animated_visibility` 或 `need_update_nodes_visibility`）。
-   它只跑 `DEPSOP_FLAG_AFFECTS_VISIBILITY` 的操作，算完刷新
+   它只执行带 `DEPSOP_FLAG_AFFECTS_VISIBILITY` 的操作，算完刷新
    `affects_visible_id`，让第 3 阶段能跳过"看不见的重活"。
 3. *`THREADED_EVALUATION`* 是主战场，用任务池并行。
    `check_operation_node_visible()`（#src("source/blender/depsgraph/intern/eval/deg_eval.cc:126")）
@@ -941,7 +941,7 @@ enum class EvaluationStage {
    （#src("source/blender/depsgraph/intern/eval/deg_eval.cc:216")，
    流体域 / 动态绘画画布会直接改别的物体，有竞态，见 #115636）。
    判定到这类节点时，第 3 阶段*把它排除*并设置 `need_single_thread_pass`，
-   留到第 4 阶段用普通队列串行跑。
+   留到第 4 阶段用普通队列串行执行。
 
 任务池的创建有一个重要分支：
 
@@ -961,7 +961,7 @@ TaskPool *deg_evaluate_task_pool_create(DepsgraphEvalState *state)
 用来判断"某个 bug 是不是并发引起的"。
 
 #warn[
-  求值期间会释放 Python 的 GIL，因为 Python 驱动表达式需要在其它线程里跑
+  求值期间会释放 Python 的 GIL，因为 Python 驱动表达式需要在其它线程里执行
   （#src("source/blender/depsgraph/intern/eval/deg_eval.cc:440")：
   `BPy_BEGIN_ALLOW_THREADS`，注释指向 #91046）。这意味着*求值回调里的
   Python 代码可能在非主线程执行*。写驱动表达式时不要假设自己持有 GIL
@@ -1063,7 +1063,7 @@ void DEG_graph_build_from_ids(Depsgraph *graph, Span<ID *> ids);
 void DEG_graph_build_from_collection(Depsgraph *graph, Collection *collection);
 ```
 
-它们各自实例化一个"构建流水线"然后跑
+它们各自实例化一个"构建流水线"然后执行
 （#src("source/blender/depsgraph/intern/depsgraph_build.cc:283")）：
 
 ```cpp
@@ -1216,7 +1216,7 @@ void DepsgraphNodeBuilder::build_object_modifiers(Object *object)
 - *可动画的可见性会把 `has_animated_visibility` 置真*，
   从而启用 `DYNAMIC_VISIBILITY` 阶段。
 
-真正跑修改器栈的是 `BKE_object_eval_uber_data()`
+真正求值修改器栈的是 `BKE_object_eval_uber_data()`
 （#src("source/blender/blenkernel/intern/object_update.cc:375")），
 它是 `GEOMETRY_EVAL` 操作的回调
 （#src("source/blender/depsgraph/intern/builder/deg_builder_nodes.cc:1754")）。
@@ -1748,8 +1748,8 @@ std::string DEG_stringify_recalc_flags(unsigned int flags);
      只标了 `ID_RECALC_EDITORS` 却期望几何重算 → 标记选轻了。
   3. 开 `--debug-depsgraph-eval`，看对应的操作*有没有被求值*。
      没有 → 依赖关系缺了，用 `DEG_debug_graph_relations_validate()` 确认。
-  4. 有求值，看 `--debug-depsgraph-time` 的输出，确认它跑了。
-     跑了但结果不对 → 问题在计算函数里，不在依赖图里。
+  4. 有求值，看 `--debug-depsgraph-time` 的输出，确认它确实执行了。
+     已执行但结果不对 → 问题在计算函数里，不在依赖图里。
 
   这四步能把"依赖图问题"与"计算问题"彻底分开，
   避免在错误的地方找 bug。

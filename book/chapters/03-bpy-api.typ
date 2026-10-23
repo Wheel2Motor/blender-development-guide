@@ -12,7 +12,7 @@
 
 本章不涉及 UI 绘制与操作符编写，那是第 5 章的内容；数据批处理的性能话题留到第 6 章。
 
-想照着官方教程亲手跑通第一个脚本（而不是先读 API），从官方手册的这篇开始：
+想照着官方教程亲手成功运行第一个脚本（而不是先读 API），从官方手册的这篇开始：
 #weblink("https://docs.blender.org/manual/en/latest/advanced/scripting/introduction.html#getting-started", label: [脚本入门（Getting Started）])。
 
 == 3.1 模块地图
@@ -1131,8 +1131,8 @@ else:
    不要依赖任何 `context.window` / `context.area` / `context.region`。
 
 #pitfall[
-  *"在我这儿能跑"的上下文 bug。* 一段用了 `bpy.context.area.type` 的代码，
-  在脚本编辑器里跑没问题，装成 addon 后在面板按钮里点就可能崩 ——
+  *"只在特定环境正常运行"的上下文 bug。* 一段用了 `bpy.context.area.type` 的代码，
+  在脚本编辑器里运行正常，装成 addon 后在面板按钮里点就可能崩 ——
   因为那时的 `area` 不是脚本编辑器。凡是读了 `area` / `region` / `space_data`
   的代码，都必须假设它们可能是 `None`。
 ]

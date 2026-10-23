@@ -625,10 +625,10 @@ Python 侧的一切都在 `scripts/` 下（共 9 个子目录、808 个文件、
    `bl_mesh_*.py`、`bl_node_*.py`、`bl_blendfile_*.py`（文件读写与库链接）
    等。命名规律是 `bl_<领域>_<主题>.py`。],
 
-  [无头运行 Blender 跑脚本],
+  [无头运行 Blender 并执行脚本],
   [#p("tests/utils/blender_headless.py")],
   [测试常用的无头封装；同目录还有
-   `bl_run_operators.py`（批量跑操作符）、
+   `bl_run_operators.py`（批量执行操作符）、
    `bl_run_operators_event_simulate.py`（模拟事件序列）、
    `batch_load_blendfiles.py`。],
 
@@ -637,7 +637,7 @@ Python 侧的一切都在 `scripts/` 下（共 9 个子目录、808 个文件、
     #p("tests/python/cycles_render_tests.py")
     #p("tests/python/workbench_render_tests.py")],
   [按引擎分文件。它们与 `tests/files/` 中的参考图比较，
-   属于需要 GPU 的测试，通常不在本地全跑。],
+   属于需要 GPU 的测试，通常不在本地全部执行。],
 
   [检查代码风格与许可证头],
   [#p("GNUmakefile")],
@@ -647,7 +647,7 @@ Python 侧的一切都在 `scripts/` 下（共 9 个子目录、808 个文件、
 
   [界面截图回归测试],
   [#p("tests/python/ui_screenshot_tests.py")],
-  [对界面控件做截图比对；改界面代码后值得先跑一次。],
+  [对界面控件做截图比对；改界面代码后值得先执行一次。],
 
   [验证插件全部可加载],
   [#p("tests/python/bl_load_addons.py")

@@ -551,7 +551,7 @@ RNA 类型上」，不给就是「返回延迟对象，等注册时再处理」�
 #warn[
   这里有两个直接后果。
   第一，属性定义必须写成*带注解*的形式（`name: bpy.props.XxxProperty(...)`）。
-  写成 `name = bpy.props.XxxProperty(...)` 也能跑，但那是因为 Python 的类体
+  写成 `name = bpy.props.XxxProperty(...)` 也能运行，但那是因为 Python 的类体
   恰好把结果存进了 `__dict__`；一旦使用 `from __future__ import annotations`
   或注解是字符串，只有带注解的形式才稳定。
   第二，因为用了 `typing.get_type_hints`（见
@@ -1283,7 +1283,7 @@ def unregister():
   （#src("source/blender/python/intern/bpy_app_timers.cc:44")）。
   这意味着它*在主线程*运行，操作 `bpy.data` 是安全的；
   但也意味着*你在回调里睡多久，界面就卡多久*。
-  千万不要在定时器里 `time.sleep()` 或跑大循环。
+  千万不要在定时器里 `time.sleep()` 或执行耗时循环。
 ]
 
 === 5.5.5 `bpy.app.handlers`
@@ -1639,7 +1639,7 @@ class T_OT_probe_slider(bpy.types.Operator):
 
 === 5.7.4 与重做面板的配合
 
-重做面板（Redo 面板，默认快捷键 `F9`）之所以能「用同一组参数再跑一遍」，
+重做面板（Redo 面板，默认快捷键 `F9`）之所以能「用同一组参数再执行一遍」，
 靠的是操作符执行完后被登记进窗口管理器的操作符栈。
 判断条件是 `OPTYPE_REGISTER | OPTYPE_UNDO` 两者之一
 （#src("source/blender/windowmanager/intern/wm_event_system.cc:1270")）：

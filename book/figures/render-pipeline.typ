@@ -225,7 +225,7 @@
       key: "其余情况 → 合成器管线",
       l1: "do_render_compositor()",
       l2: "需要时先 do_render_engine() 补渲场景",
-      l3: "再跑节点树：RE_compositor_execute()",
+      l3: "再执行节点树：RE_compositor_execute()",
     ),
   )
 

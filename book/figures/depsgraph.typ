@@ -310,21 +310,21 @@
   line((7.00, -6.34), (7.00, -6.76), stroke: 0.8pt + luma(50%), mark: (end: ">", scale: 0.45))
   content(
     (7.16, -6.45),
-    text(font: font-zh, size: 5.9pt, fill: faint)[只跑被标脏的子图],
+    text(font: font-zh, size: 5.9pt, fill: faint)[只求值被标脏的子图],
     anchor: "west",
   )
 
   let stages = (
-    (key: "COPY_ON_EVAL", col: c1, l1: "先只跑 COPY_ON_EVAL", l2: "保证后续操作看到的", l3: "求值数据已展开",
+    (key: "COPY_ON_EVAL", col: c1, l1: "先只执行 COPY_ON_EVAL", l2: "保证后续操作看到的", l3: "求值数据已展开",
      note: "避免环里看到未展开数据", file: "deg_eval.cc:248"),
-    (key: "DYNAMIC_VISIBILITY", col: c3, l1: "跑影响可见性的操作", l2: "刷新 affects_visible_id", l3: "跳过看不见的重活",
+    (key: "DYNAMIC_VISIBILITY", col: c3, l1: "执行影响可见性的操作", l2: "刷新 affects_visible_id", l3: "跳过看不见的重活",
      note: "has_animated_visibility", file: "deg_eval.cc:477"),
     (key: "THREADED_EVALUATION", col: c2, l1: "BLI_task_pool 多线程", l2: "num_links_pending 归零", l3: "才允许入队",
      note: "BLI_task_pool_suspended", file: "deg_eval.cc:409"),
     // note 是"触发原因"（行号跟着它），file 是"阶段入口"的位置，两者分开标注：
     // 元球/子帧的判据 is_metaball_object_operation 定义在 deg_eval.cc:199、调用在 :255；
-    // 真正跑单线程兜底的是 :365 的 evaluate_graph_single_threaded_if_needed()。
-    (key: "SINGLE_THREADED", col: c4, l1: "少数不安全节点", l2: "元球 / 子帧模拟", l3: "退回单线程跑完",
+    // 真正执行单线程兜底的是 :365 的 evaluate_graph_single_threaded_if_needed()。
+    (key: "SINGLE_THREADED", col: c4, l1: "少数不安全节点", l2: "元球 / 子帧模拟", l3: "退回单线程完成",
      note: "is_metaball_object_operation :255", file: "deg_eval.cc:365"),
   )
   // 长标识符的折行点：在 _ 之后插零宽空格（与 main.typ 处理长路径的做法一致）。

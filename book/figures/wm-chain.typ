@@ -86,7 +86,7 @@
   step("3", y0 - 2 * vstep, cx0, "按 idname 解析出类型", "WM_operatortype_find()",
     [查全局注册表；查不到则链条中断], c-tip)
   step("4", y0 - 3 * vstep, cx0, "poll 判定能否执行", "bool (*poll)(bContext *C)  ·  :1146",
-    [只回答"当前上下文能不能跑"], c-warn)
+    [只回答"当前上下文是否允许执行"], c-warn)
   arrow(cx0 + 0.30, y0 - bh - 0.04, y0 - vstep + 0.04)
   arrow(cx0 + 0.30, y0 - vstep - bh - 0.04, y0 - 2 * vstep + 0.04)
   arrow(cx0 + 0.30, y0 - 2 * vstep - bh - 0.04, y0 - 3 * vstep + 0.04)

@@ -137,7 +137,7 @@
   //   enable() 先 importlib.import_module(module_name)（:458），再 mod.register()（:544）。
   //   disable() 只调用 mod.unregister()（:595），**不动 sys.modules**；只有 register()
   //   抛异常时那条路径才会 del sys.modules[module_name]（:548）。所以"再次启用"时
-  //   importlib 命中模块缓存、模块代码不重新执行，真正被重跑的是 ④ register()。
+  //   importlib 命中模块缓存、模块代码不重新执行，真正再次执行的是 ④ register()。
   //   → 箭头终点必须在 ④（不是 ⑤，更不是 ⑥），并标出"不重新导入模块"。
   let y_out = 1.95      // 出发点：⑦ 模块仍在内存 那一行的中心
   let y_ret = 6.45      // 终点：④ register() 那一行的中心

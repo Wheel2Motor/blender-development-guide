@@ -74,8 +74,9 @@ Windows 默认生成并构建 `build_windows/Blender.sln`（新工具链也可�
 macOS/Linux 默认使用 `build_macos/` 或 `build_linux/`。
 
 官方仓库拉不动时，`init-blender` 可以换主仓库来源，`--mirror` 默认就是 `official`：
-`--mirror=github` 走 GitHub 官方镜像，`--mirror=gitee` 走 Gitee 第三方镜像（同步状态由
-维护者决定，脚本会先核验基准分支与提交，落后就失败），`--mirror-url=URL` 指向自建镜像。
+`--mirror=github` 走 GitHub 官方镜像，`--mirror=gitee` 走 Gitee（码云）国内同步镜像；
+中国大陆网络环境通常值得优先尝试 Gitee，但脚本仍会核验基准分支与提交，避免使用尚未
+同步完整的版本。`--mirror-url=URL` 可指向自建镜像。
 镜像只换主仓库地址，`lib/` 平台库与 Git LFS 数据仍来自 `projects.blender.org`（`init-blender`
 会把主仓库的 LFS 内容补齐，因为上游 configure 会拒绝指针形态的 `startup.blend`），
 构建命令不变；细节见 [README-BLENDER.md](doc/README-BLENDER.md)。

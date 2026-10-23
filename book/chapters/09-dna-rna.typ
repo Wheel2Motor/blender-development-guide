@@ -405,7 +405,7 @@ struct MyInternalStruct {
 
 #pitfall[
   *易错点 2：改了 DNA 却不重新构建 `makesdna`。*  `DNA_*.h` 的改动必须让
-  `makesdna` 重跑一遍，重新生成 `dna.cc` 等产物。
+  再次执行 `makesdna`，重新生成 `dna.cc` 等产物。
   正常用 CMake/Ninja 时会自动处理，但如果你手工拷贝过 `build/` 目录，
   或者用 `ccache` 加手工 `g++` 编译，就可能读到过期的 SDNA，
   症状是"字段明明加了，Python 里读出来却是 0"。
@@ -667,7 +667,7 @@ Blender 的 versioning 分三个层次：
   在 *release 分支*（比如本书的 #raw(blender-branch)）上加 versioning
   是违反上游流程的：release 分支的文件格式已经冻结。
   上游的做法是在下一个开发周期的 `versioning_530.cc` 里加。
-  §9.6 为了让你能在手头的分支上跑通，演示的是"直接改 `versioning_520.cc`
+  §9.6 为了让你能在手头的分支上成功复现，演示的是"直接改 `versioning_520.cc`
   并把自己的子版本号 +1"——这在本地构建里完全有效，
   但如果你要提交给上游，请先读第 17 章的贡献流程。
 ]
@@ -1399,13 +1399,13 @@ add_custom_command(
 )
 ```
 
-依赖链是：`DNA_*.h` 变化 → 重跑 `makesdna` → 重新生成 5 个产物
-→ `bf_dna` 重新编译 → `makesrna` 重跑（它依赖 `bf_dna_defaults`，
+依赖链是：`DNA_*.h` 变化 → 再次执行 `makesdna` → 重新生成 5 个产物
+→ `bf_dna` 重新编译 → 再次执行 `makesrna`（它依赖 `bf_dna_defaults`，
 见 #src("source/blender/makesrna/intern/CMakeLists.txt:413")）
 → `rna_*_gen.cc` 重新生成 → `bf_rna` 重新编译。
 
 *这条链比你想的长*：改一个 `DNA_*.h` 里的一个字段，
-会触发 `makesrna` 重跑并重写*几乎全部* `_gen.cc`。
+会触发 `makesrna` 再次执行并重写*几乎全部* `_gen.cc`。
 所以第一次改 DNA 后的增量构建会慢很多，这是正常的。
 
 对应的经验规则：
@@ -1442,7 +1442,7 @@ add_custom_command(
 === 9.4.6 常见问题
 
 #pitfall[
-  *易错点 1：改了 DNA 但 `makesrna` 没重跑。*  症状是 Python 侧看不到新字段，
+  *易错点 1：改了 DNA 但 `makesrna` 没有再次执行。*  症状是 Python 侧看不到新字段，
   但 C++ 侧编译通过。原因几乎总是 `DEPENDS` 没被触发 ——
   例如你手工改了构建目录里的 `dna.cc`，
   或者用了 `ccache` 加上不完整的构建缓存。
@@ -1860,7 +1860,7 @@ $ cmake --build ../build_windows --target blender
 $ cd ../build_windows && ninja
 ```
 
-构建开始后，`makesdna` 会重跑。你可以趁这个机会去看生成物
+构建开始后，`makesdna` 会再次执行。你可以趁这个机会去看生成物
 （注意 `<build>` 换成你自己的构建目录）：
 
 #win #h(0.4em) 下用 PowerShell 列出这些产物：
@@ -1936,7 +1936,7 @@ BLI_STATIC_ASSERT(offsetof(struct Scene, book_demo_value) == <某个4的倍数>,
 
 === 9.6.5 第 4 步：让 `bpy` 可见并验证
 
-再构建一次（这次 `makesrna` 会重跑并重新生成 `rna_scene_gen.cc`），
+再构建一次（这次 `makesrna` 会再次执行并重新生成 `rna_scene_gen.cc`），
 然后启动 Blender，在脚本控制台里验证：
 
 ```python
@@ -2038,7 +2038,7 @@ print(bpy.data.scenes["DemoScene"].book_demo_value)   # 期望 3.5（注意上�
 
 #warn[
   按上游流程，release 分支不该加 versioning（文件格式已冻结）。
-  这里为了让你能在手头的 #raw(blender-branch) 上跑通才这么写。
+  这里为了让你能在手头的 #raw(blender-branch) 上成功复现才这么写。
   真正的上游提交应该落在下一个开发周期的
   `versioning_530.cc` 里（照
   #src("source/blender/blenloader/intern/versioning_xxx_template.cc") 的四步走）。

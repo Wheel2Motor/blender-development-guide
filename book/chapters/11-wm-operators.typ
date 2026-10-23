@@ -2742,7 +2742,7 @@ void view3d_keymap(wmKeyConfig *keyconf)
      - 把 `ot->idname` 改成 `"OBJECT_report_selected_count"`（去掉中间的 `_OT_`）——
        在哪一步失败？错误信息是什么？
      这三组对照实验比读十遍源码更能让你记住本章的内容。
-  4. 用 `blender -d` 跑一次，确认 §11.1.5 提到的
+  4. 执行一次 `blender -d`，确认 §11.1.5 提到的
      "等效 Python 调用串"被打印出来（提示：需要 `G_DEBUG_WM`，
      也就是 `--debug-wm`），把你操作后的那行输出记下来。
 

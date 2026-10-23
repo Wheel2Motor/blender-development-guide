@@ -4,7 +4,7 @@
 
 到目前为止，本书讲过的所有改动都是"把命令接进某个已有的执行流程"：
 第 11 章把用户的按键接到一个操作符上，第 12 章把一块矩形接到一个编辑器类型上，
-第 13 章讲清楚了这套流程跑在什么样的求值图里。但这些章节都回避了一个问题：
+第 13 章讲清楚了这套流程在什么样的求值图里执行。但这些章节都回避了一个问题：
 *真正把几何算出来的代码，是谁在什么时候调用的？*
 
 答案是本章的两个主角。第一是 #term("修饰器", "modifier") ——
@@ -468,7 +468,7 @@ void BKE_modifier_type_panel_id(ModifierType type, char *r_idname)
 答案在 #src("source/blender/blenkernel/intern/mesh_data_update.cc") 的
 `mesh_calc_modifiers()`（同文件:271）。
 
-求值循环被明确切成了两段。第一段只跑"开头的连续变形修饰器"
+求值循环被明确切成了两段。第一段只执行"开头的连续变形修饰器"
 （#src("source/blender/blenkernel/intern/mesh_data_update.cc:345")）：
 
 ```cpp

@@ -7,7 +7,7 @@
 *你怎么证明它是对的，以及怎么把它送回上游。*
 
 这两个问题在 Blender 这种规模的项目里不是礼节，而是硬需求。
-第 16 章讲了"优化完必须跑测试"；反过来，任何在核心代码里的改动
+第 16 章讲了"优化完成后必须执行测试"；反过来，任何在核心代码里的改动
 —— 改一个求值顺序、动一个数据结构的布局、换一个默认值 ——
 都可能影响几百个已有场景。上游对补丁的要求因此集中在两点：
 *能复现、能验证*。
@@ -20,7 +20,7 @@
 
 === 17.1.1 三级测试与两个入口
 
-Blender 的测试可以按"测什么、怎么写、跑多久"分成三级。它们的编写位置、
+Blender 的测试可以按"测试对象、编写方式、执行耗时"分成三级。它们的编写位置、
 运行开关和前置条件都不一样，混在一起记一定会乱。
 
 #figure(
@@ -37,12 +37,12 @@ Blender 的测试可以按"测什么、怎么写、跑多久"分成三级。它�
     [少数需要],
     [Python 集成测试],
     [`tests/python/`（`bl_blendfile_*`、`bl_animation_*` 等）],
-    [从 `bpy` 出发，跑真实的文件、操作符、渲染与导入导出],
+    [从 `bpy` 出发，处理真实文件并执行操作符、渲染与导入导出],
     [大量需要],
     [压力测试工具],
     [`tests/utils/`],
     [批量加载 `.blend`、模拟用户输入、模糊测试导入器。
-     *不是*自动测试，需要手动跑],
+     *不是*自动测试，需要手动执行],
     [需要],
   ),
   caption: [三级测试。第三级的定位由 `tests/utils/readme.rst:5-7` 明确说明：它们"不打算作为自动单元测试运行"，而是用于压力测试与 `git bisect`。],
@@ -77,15 +77,15 @@ make test（#win 是 make.bat test）
 
 #tip[
   `ctest` 的两个参数在日常里最省时间：
-  `ctest -R <正则>` 只跑匹配的用例，`ctest -j <n>` 并行跑。
+  `ctest -R <正则>` 只执行匹配的用例，`ctest -j <n>` 并行执行。
   例如只想验证你自己改的那一块：
   `ctest -R bl_animation --output-on-failure`。
-  `make test` 只是这两个参数都不给的"跑全部"版本。
+  `make test` 只是这两个参数都不给的"执行全部测试"版本。
 ]
 
 #win 上 `make.bat test` 有一个容易踩到的行为：它*隐含 `nobuild`*
 （`build_files/windows/parse_arguments.cmd:110-112`），也就是说
-*它只跑测试，不先构建*。这与其他开关的直觉相反 ——
+*它只执行测试，不先构建*。这与其他开关的直觉相反 ——
 POSIX 上也没有对应的"构建后再测"目标，`make test` 同样不构建。
 所以两条命令是固定搭配：
 
@@ -99,7 +99,7 @@ $ make -j$(nproc) && make test
 
 === 17.1.2 统一测试参数：`tests/CMakeLists.txt:56`
 
-Python 集成测试不是"随便跑一个脚本"。每个用例都由一组固定的命令行参数启动，
+Python 集成测试不是"随便执行一个脚本"。每个用例都由一组固定的命令行参数启动，
 这组参数写在 #src("tests/CMakeLists.txt:56-63")：
 
 ```text
@@ -122,17 +122,17 @@ Python 集成测试不是"随便跑一个脚本"。每个用例都由一组固�
     align: (left, left),
     stroke: 0.4pt + luma(78%),
     table.header([*参数*], [*为什么测试要用它*]),
-    [`--background`], [不启动界面。测试必须在无人值守的环境里能跑],
+    [`--background`], [不启动界面。测试必须能在无人值守的环境里执行],
     [`--console-crash-handler`], [崩溃信息打到控制台，而不是写成文件。CI 里这一步很关键],
     [`--factory-startup`], [忽略用户配置与插件。*你的插件不会影响测试结果*],
     [`--debug-memory`], [切到完全受保护的分配器，越界写与泄漏能被抓到（见第 16 章 §16.1.2）],
-    [`--debug-exit-on-error`], [检测到错误立即以非零码退出，而不是"跑完了、但结果是错的"],
+    [`--debug-exit-on-error`], [检测到错误立即以非零码退出，而不是"执行完毕、但结果是错的"],
     [`--python-exit-code 1`], [脚本抛异常时以退出码 1 结束。没有这一条，CI 会把失败当成功],
   ),
   caption: [统一测试参数（`tests/CMakeLists.txt:56-63`）与它们的用途。这套组合也是你自己写复现脚本时该照抄的模板。],
 ) <tbl-test-params>
 
-这解释了一个新手常见的困惑："为什么我在界面里跑得好好的，`make test` 却失败？"
+这解释了一个新手常见的困惑："为什么我在界面中手动执行时一切正常，`make test` 却失败？"
 因为这组参数关掉了界面、关掉了你的插件与偏好设置，并且打开了三个会
 *主动报错*的调试开关。测试比手工操作严格得多，这是有意的 ——
 它要抓的正是"你的机器上恰好没出问题"的那类缺陷。
@@ -152,7 +152,7 @@ C++ 单元测试用 GoogleTest（含 gmock）。三个相关事实：
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
 ```
 
-默认是 `OFF` —— 也就是说，*默认构建里没有单元测试可跑*。
+默认是 `OFF` —— 也就是说，*默认构建里没有可执行的单元测试*。
 打开它的最省事办法是用开发者档位（`blender_developer.cmake:22` 里有
 `set(WITH_GTESTS ON CACHE BOOL "" FORCE)`，见第 2 章 §2.6.3），
 #win 上也可以用 `make.bat with_tests`
@@ -207,7 +207,7 @@ option(WITH_GTESTS "Enable GTest unit testing" OFF)
 （#src("tests/gtests/testing/testing_main.cc:16-31")）。
 *这正是"直接手敲测试可执行文件会失败"的原因* —— 这两个参数缺席了。
 
-还有一个与第 16 章相呼应的设计：*GTest 的 `main` 会在跑任何用例之前
+还有一个与第 16 章相呼应的设计：*GTest 的 `main` 会在执行任何用例之前
 无条件打开受保护分配器与内存泄漏检测*，并让泄漏直接导致失败
 （#src("tests/gtests/testing/testing_main.cc:42-46")）：
 
@@ -288,9 +288,9 @@ $ git lfs pull
 ```
 
 #pitfall[
-  在 LFS 未拉全的检出上跑 `make test`，你会得到一批"看起来像代码 bug"的失败：
+  在 LFS 未拉全的检出上执行 `make test`，你会得到一批"看起来像代码 bug"的失败：
   网格对比测试找不到参考图、导入导出测试找不到输入 `.blend`、
-  渲染回归测试没有 ground truth。*在开始排查代码之前，先跑一次
+  渲染回归测试没有 ground truth。*在开始排查代码之前，先执行一次
   `git status --porcelain tests/files`。* 这一步能省下大量白费功夫。
   第 2 章 §2.2.5 已经指出"构建不需要这些数据"；这里要补上另一半：
   *测试需要。*
@@ -336,11 +336,11 @@ function(add_blender_test_allow_error testname)
   这条区分对你写新用例很有用。如果你在为"错误处理"写测试
   —— 比如"加载损坏的图片时要给出友好提示而不是崩溃" ——
   用 `add_blender_test_allow_error`；其余情况一律用 `add_blender_test`。
-  反过来，如果你发现自己想用 `allow_error` 只是因为"不改它就跑不过"，
+  反过来，如果你发现自己想用 `allow_error` 只是因为"不改它就无法通过测试"，
   那说明你的代码真的有问题。
 ]
 
-界面的模拟测试还多一层前置条件：它需要能跑无头 Wayland。
+界面的模拟测试还多一层前置条件：它需要能够启动无头 Wayland。
 相关变量（`WESTON_BIN`、`WAYLAND_ROOT_DIR` 等）由 CMake 在
 `WITH_UI_TESTS` 打开时组装成测试环境变量
 （#src("tests/python/CMakeLists.txt:75-104")）。
@@ -351,7 +351,7 @@ Python 集成测试里有相当一部分是*视觉对比*：把渲染结果与
 `tests/files/` 下的参考图逐像素比较。这套机制的四个部分值得知道：
 
 *一、参考数据由测试脚本自己更新，而不是你手动拷。* 当对比失败时，
-生成的报告 HTML 里会直接给出该跑的命令
+生成的报告 HTML 里会直接给出应执行的命令
 （#src("tests/python/modules/render_report.py:424-428")）：
 
 ```text
@@ -371,7 +371,7 @@ Be sure to commit the new reference images under the tests/files folder afterwar
 #src("tests/python/modules/render_report.py:499")。
 看报告比读终端输出快得多。
 
-*三、单条用例可以用 `ctest -R` 重跑。* 报告里给出的命令就是
+*三、单条用例可以用 `ctest -R` 重新执行。* 报告里给出的命令就是
 `ctest -R <用例名>`，这也是日常改渲染相关代码时最快的循环。
 
 *四、这也是为什么测试失败可能是"你在改别人的参考图"。*
@@ -397,7 +397,7 @@ Blender 还有一个独立的性能基准框架，它与功能测试是两套机
 第 16 章的方法论可以直接用在这里：*先有一个稳定的数字，
 再谈优化*。`tests/performance/` 提供的就是"稳定的数字"那一层。
 
-=== 17.1.8 静态检查：不跑代码也能发现问题
+=== 17.1.8 静态检查：不执行代码也能发现问题
 
 `GNUmakefile` 里还有一整组 `check_*` 目标。它们不在 `test` 里，
 是提交前的自检工具。与 C++ 源码改动最相关的几个：
@@ -470,9 +470,9 @@ C/C++ 的格式规范全部由仓库根目录的 `.clang-format` 描述。几个
 ) <tbl-clang-format>
 
 #tip[
-  *不要手工对齐。* 改完代码跑一次 `make format`（#win 是 `make.bat format`），
+  *不要手工对齐。* 改完代码执行一次 `make format`（#win 是 `make.bat format`），
   它会按上面这些设置重排。手工对齐反而会在评审时引入大量无意义的 diff。
-  提交前跑一次格式化，已经是最基本的礼貌。
+  提交前执行一次格式化，已经是最基本的礼貌。
 ]
 
 代码规范不止格式。几条在阅读源码时会注意到的约定：
@@ -559,19 +559,19 @@ Pull Request: https://projects.blender.org/blender/blender/pulls/${PullRequestIn
   还有一条与"能不能验证"直接相关的实践：把复现步骤写成脚本
   （`blender -b -X --python-exit-code 1 --python repro.py`），
   而不是写成"打开文件，拖动这个物体，然后……"。
-  前者评审者能直接跑，后者只能相信你。
+  前者评审者能直接执行，后者只能相信你。
 ]
 
 === 17.2.4 静态检查与评审的关系
 
-评审者不会替你跑 `make format` 和 `make license`。这两件事属于
+评审者不会替你执行 `make format` 和 `make license`。这两件事属于
 提交者的准备工作。一个实用的提交前清单：
 
 ```bash
 $ make format          # 格式化（#win：make.bat format）
 $ make license         # 许可证头
 $ make check_mypy      # 只改了 Python 时
-$ make test            # 至少跑与你改动相关的子集
+$ make test            # 至少执行与你改动相关的子集
 ```
 
 #win 上把前两条换成 `make.bat format` 与 `make.bat license`
@@ -723,14 +723,14 @@ Blender 的代码托管与评审在 `projects.blender.org` 上，用 Gitea。
 ) <tbl-gitea-files>
 
 `cla.yml` 值得单独说一句：它说明 *PR 一旦被打开（或从草稿转为可评审），
-就会自动跑一次许可协议检查*。这是很多新手第一次提 PR 时最困惑的一环 ——
+就会自动执行一次许可协议检查*。这是很多新手第一次提 PR 时最困惑的一环 ——
 "为什么有个机器人一直提醒我签协议"。它就是这里。
 
 标准的 PR 生命周期大致是：
 
 1. *先搜后提。* 在 `projects.blender.org` 上检索关键字，
    确认没有重复的 PR 或已修复的提交。
-2. *本地做对。* 跑格式化、跑测试（17.2.4 那张清单）。
+2. *本地做对。* 执行格式化和测试（17.2.4 那张清单）。
 3. *开 PR。* 用模板填 `Description`，附复现脚本或测试用例。
    如果是"修 bug"，在描述里写清"修复前如何、修复后如何"。
 4. *自动检查。* CLA 检查 + 构建/测试机器人的反馈先到位。
@@ -764,7 +764,7 @@ Blender 的代码托管与评审在 `projects.blender.org` 上，用 Gitea。
   本章的要点可以压成四句话：
   1. *三级测试各有前置条件*；C++ 单元测试要 `WITH_GTESTS=ON`
      （开发者档位已经打开），Python 集成测试要 `tests/files/` 的 LFS 数据。
-  2. *跑测试前先确认 LFS 拉全了*：`git status --porcelain tests/files`
+  2. *执行测试前先确认 LFS 拉全了*：`git status --porcelain tests/files`
      不该有大片 `D`。这是最容易误判成代码 bug 的一类失败。
   3. *提交信息是固定形状*：一行标题、一段正文、最后一行是平台
      自动填的 `Pull Request:` 链接。别手动加它。
@@ -772,20 +772,20 @@ Blender 的代码托管与评审在 `projects.blender.org` 上，用 Gitea。
 ]
 
 #exercise[
-  *练习 17.1* 在你自己的检出上跑 `git status --porcelain tests/files`。
+  *练习 17.1* 在你自己的检出上执行 `git status --porcelain tests/files`。
   如果输出里有大片 `D`，先 `git lfs pull` 再重新配置一次构建目录。
   记录两次配置输出里关于测试的差异 ——
   特别是 `Tests: Disabling most tests` 这一行在修好之后是否消失。
 
   *练习 17.2* 找一个你不熟悉的模块（比如 `source/blender/blenloader/tests/`），
-  用开发者档位构建后，只跑它的测试套件，把结果贴出来：
+  用开发者档位构建后，只执行它的测试套件，把结果贴出来：
   ```bash
   $ ctest -R blenloader --output-on-failure
   ```
   （用例名以 `ctest -N` 的输出为准。）
 
   *练习 17.3* 在 `source/blender/blenlib/tests/` 下选一个已有测试，
-  故意把断言里的期望值改错一位，重跑测试，把失败输出读一遍。
+  故意把断言里的期望值改错一位，重新执行测试，把失败输出读一遍。
   然后再用 `BLENDER_TEST_UPDATE=1` 之外的正常方式改回来。
   这一步的目的是让你熟悉"失败长什么样"，而不是只知道"通过"。
 
