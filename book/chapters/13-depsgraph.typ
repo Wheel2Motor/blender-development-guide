@@ -1,7 +1,7 @@
 #import "../common.typ": *
 #import "../figures/depsgraph.typ": fig-depsgraph
 
-= 第 13 章 依赖图与求值
+= 第 13 章　依赖图与求值
 
 第 12 章讲的编辑器负责"把数据画出来"。但画之前必须先有*求值结果*：
 物体在世界空间里到底在哪、网格经过修改器之后到底长什么样、

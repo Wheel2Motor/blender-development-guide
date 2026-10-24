@@ -608,6 +608,6 @@
   它是数据还是注册元数据。* `ModifierTypeInfo`、`SpaceType`、`wmOperatorType`、
   `bNodeType`、`RenderEngineType` 都是同一类东西 —— 装回调的结构体；
   而 `ScrArea`、`ARegion`、`wmKeyMap`、`bNodeSocketType` 是真正被持有很多份的数据。
-  全书反复出现的"注册模式"（见 #seealso([§0.2])）就建立在后一类是 POD、
+  全书反复出现的"注册模式"（#seealso([§0.2])）就建立在后一类是 POD、
   前一类只在启动时填一次这个分工上。
 ]

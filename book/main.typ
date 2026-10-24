@@ -59,6 +59,14 @@
 
 #set text(font: font-zh, fallback: false, size: 10.5pt, weight: 400, lang: "zh", region: "cn")
 
+// Typst 把标记模式下的单个源码换行当作空格。中文正文为了便于维护会按行折行，
+// 若换行两侧都是同一文本样式的汉字，这个空格就会出现在 PDF 文本层与 HTML 中。
+// 清理同一文本样式内的「汉字 + 空白 + 汉字」序列。代码和不同格式的边界不会被
+// 这条文本规则跨越；标题若需要分隔，使用显式的水平间距，而不依赖普通空格。
+#show regex("[\u{3400}-\u{9fff}](?:[ \\t]+[\u{3400}-\u{9fff}])+"): text => {
+  text.text.replace(regex("[ \\t]+"), "")
+}
+
 // 脚注承载不影响主线的短解释。
 #show footnote.entry: set text(font: font-zh, size: 8.5pt, weight: 400)
 

@@ -1,7 +1,7 @@
 #import "../common.typ": *
 #import "../figures/render-pipeline.typ": fig-render-pipeline
 
-= 第 15 章 渲染管线与引擎
+= 第 15 章　渲染管线与引擎
 
 第 13 章讲清楚了依赖图怎么把场景算成"一份可以被读的求值数据"，
 第 14 章讲了这份数据是怎么被修饰器和节点加工出来的。

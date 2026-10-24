@@ -1,7 +1,7 @@
 #import "../common.typ": *
 #import "../figures/source-tree.typ": fig-source-tree
 
-= 第 8 章 源码结构深度导览
+= 第 8 章　源码结构深度导览
 
 前七章里，你始终站在 Python 这一侧：`bpy` 给你什么，你就用什么。
 从本章开始，你要走到另一侧去 —— *在数百万行 C/C++ 里找到该动的那一行*。

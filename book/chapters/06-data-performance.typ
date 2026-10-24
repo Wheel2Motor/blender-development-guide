@@ -1,7 +1,7 @@
 #import "../common.typ": *
 #import "../figures/when-to-drop.typ": fig-when-to-drop
 
-= 第 6 章 数据操作与性能
+= 第 6 章　数据操作与性能
 
 第 3 章讲的是 `bpy` 这套 API 长什么样，第 5 章讲的是怎么让用户触发它。
 本章讲第三件事：*当你真的开始读写大量数据时，哪些写法快、哪些写法慢、

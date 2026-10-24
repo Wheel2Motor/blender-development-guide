@@ -2,36 +2,35 @@
 
 = 附录 E Blender 构建与开发排错
 
-本附录按症状整理源码获取、构建、运行与开发中的高频故障。每一节先给判断依据，再给
-可执行的处理步骤；经验性建议会与源码能够确认的事实分开表述。
+本附录按症状整理源码获取、构建、运行与开发中的高频故障。遇到问题时，先找到最接近的
+症状，再按检查顺序逐项排除；不要一开始就删除整个构建目录或重新克隆仓库。
 
 == E.1 源码获取与依赖
 
 === E.1.1 官方仓库连接不稳定时，怎样选择镜像
 
-正文只使用 Blender 官方主仓库：
+Blender 的主仓库地址是：
 
 ```text
 https://projects.blender.org/blender/blender.git
 ```
 
-如果所在网络访问这个地址不稳定，可以改用下面两种来源：
+如果克隆时反复超时或中断，可以改用下面两种来源取得 Git 对象：
 
 - `https://github.com/blender/blender.git` 是 Blender 官方维护的 GitHub 镜像。Blender
   官方文档明确说明，开发仍在 `projects.blender.org` 进行，而且 GitHub 镜像不包含
   Git LFS 文件（#weblink("https://developer.blender.org/docs/handbook/contributing/using_git/clone_update/#github-mirror", label: [Git Clone and Update: GitHub Mirror])）。
 - `https://gitee.com/mirrors/blender.git` 是 Gitee（码云）国内代码托管平台上的同步镜像。
-  对中国大陆读者而言，国内网络链路通常更短，因此在官方仓库或 GitHub 连接缓慢、频繁中断时，
-  它往往是更值得优先尝试的选择。Gitee 对自身平台的介绍见
+  对中国大陆读者而言，国内网络链路通常更短；在官方仓库或 GitHub 连接缓慢、频繁中断时，
+  可以优先测试这个地址。Gitee 对自身平台的介绍见
   #weblink("https://gitee.com/about_us", label: [关于 Gitee])。
 
 #note[
-  「国内镜像通常更快、更稳定」是网络位置带来的实践经验，不是对所有地区、运营商和时段的
-  绝对保证。镜像也可能尚未同步到本书固定版本；先探测、后下载，比先克隆数 GiB 再发现版本
-  不全更省时间。
+  镜像速度会随地区、运营商和时段变化，而且同步进度可能落后。先检查目标分支与提交是否存在，
+  再开始大体积下载，可以避免克隆结束后才发现版本不全。
 ]
 
-先确认镜像公开了本书所用的发布分支：
+先确认镜像公开了前言所列的发布分支：
 
 #raw(
   "$ git ls-remote --exit-code --heads <镜像 URL> " + blender-branch,
@@ -39,7 +38,7 @@ https://projects.blender.org/blender/blender.git
   lang: "bash",
 )
 
-命令成功只说明分支存在，不能证明本书固定的 commit 已经同步。已经安装 Git LFS 时，
+命令成功只说明分支存在，不能证明前言所列的固定提交已经同步。已经安装 Git LFS 时，
 直接克隆不提供 LFS 对象的镜像，还可能在 Git 对象下载完成后才在 checkout 阶段失败。
 因此应先跳过 LFS smudge。#linux 与 #mac 使用：
 
@@ -64,12 +63,12 @@ https://projects.blender.org/blender/blender.git
 )
 
 #block(breakable: false)[
-  克隆结束后，先确认固定 commit 存在，再检出标签，并从官方仓库补齐 LFS 对象：
+  克隆结束后，先确认固定提交存在，再直接检出该提交，并从官方仓库补齐 LFS 对象：
 
   #raw(
     "$ cd blender\n"
     + "$ git cat-file -e " + blender-commit + "^{commit}\n"
-    + "$ git switch --detach " + blender-tag + "\n"
+    + "$ git switch --detach " + blender-commit + "\n"
     + "$ git remote add lfs-fallback \\\n"
     + "    https://projects.blender.org/blender/blender.git\n"
     + "$ git config lfs.remote.searchall true\n"
@@ -81,8 +80,8 @@ https://projects.blender.org/blender/blender.git
   )
 ]
 
-如果 `git cat-file` 失败，说明镜像尚未包含本书基准，不要用分支顶端的另一个 commit
-替代。镜像只负责提供 Git 对象；平台预编译库与缺失的 Git LFS 对象仍应从
+如果 `git cat-file` 失败，说明镜像尚未包含目标提交；不要用分支顶端的另一个提交
+替代。镜像只负责提供 Git 对象，平台预编译库与缺失的 Git LFS 对象仍应从
 `projects.blender.org` 获取。
 
 === E.1.2 克隆中断后，索引或锁文件异常
@@ -97,7 +96,7 @@ https://projects.blender.org/blender/blender.git
 索引还没写完，同时留下了 `.git/index.lock`。
 
 #pitfall[
-  不要急着重新克隆。先按下面的顺序处理，通常几分钟就能恢复，省下几 GB 的重复下载。
+  不要急着重新克隆。只要 Git 对象已经下载完成，通常可以重建索引，避免重复下载数 GB 数据。
 ]
 
 ```powershell
@@ -120,6 +119,11 @@ $ git submodule status
 
 修复后 `git submodule status` 会列出 `.gitmodules` 里的子模块（未初始化的前面带 `-`）。
 
+#mac 与 #linux 可用 `ps` 或 `pgrep` 确认没有残留的 `git` / `git-lfs` 进程，再用
+`test -e .git/index.lock` 检查锁文件；确认它确实是残留后删除，随后同样执行
+`git reset`、`git ls-files` 与 `git submodule status`。锁文件存在并不自动意味着可以删除：
+若仍有 Git 进程在工作，应等待它结束。
+
 === E.1.3 为什么 `git submodule update` 没有任何反应
 
 因为预编译库的子模块在 `.gitmodules` 里被显式标成了不自动更新：
@@ -135,7 +139,7 @@ $ git submodule status
   lang: "text",
 )
 
-这是有意为之——四个平台的库加起来很大，不应该因为一次 `git submodule update --recursive`
+这是有意为之——不同平台与架构的库加起来很大，不应该因为一次 `git submodule update --recursive`
 就全拉下来。要单独启用某个平台，先打开它的 update 策略再更新：
 
 ```bash
@@ -145,7 +149,7 @@ $ git submodule update --init lib/windows_x64
 
 Windows 上的 `make.bat update` 与 macOS/Linux 上的 `make update` 会自动完成这套配置。
 
-=== E.1.4 我只想要源码，不想下几 GB 的测试数据
+=== E.1.4 只阅读源码时，可以暂缓哪些下载
 
 如果还不清楚“Git 仓库里的指针”和“LFS 服务里的实体文件”是什么关系，先读 §2.2.1
 的「先理解 Git LFS」；下面只讨论哪些对象可以暂缓下载。
@@ -157,7 +161,8 @@ Windows 上的 `make.bat update` 与 macOS/Linux 上的 `make update` 会自动�
   LFS 对象，首次配置前必须还原；
 - `lib/<平台>_<架构>/` 子模块里的预编译依赖库。
 
-所以可以在克隆阶段暂时跳过 LFS 内容以加快 Git 检出，但*不能直接开始配置*。
+如果只是阅读和检索源码，可以在克隆阶段暂时跳过 LFS 内容；准备配置和构建之前，
+则必须还原构建所需资源并取得当前平台的预编译库。
 随后执行 `make update`（#win 为 `make.bat update`）会同时补主仓库 LFS 与平台库；
 也可以先单独补主仓库对象：
 
@@ -165,15 +170,14 @@ Windows 上的 `make.bat update` 与 macOS/Linux 上的 `make update` 会自动�
 $ git lfs pull
 ```
 
-=== E.1.5 预编译库要下多久？能中途停吗
+=== E.1.5 预编译库下载很慢，能否中断
 
-Windows 平台的库在 3 GB 量级，且大文件（例如 LLVM）传输很慢。源码里对这个阶段
-有一段明确的警告：第一次下载完成后，还会发生一次「看不出进度」的更大更新，
-可能超过一小时，*不要中断*。
+预编译库通常有数 GB，其中还包含 LLVM 等大文件。下载完成后，Git LFS 还可能经历一段
+输出很少的检出过程；此时进程仍在工作，并不表示卡死。只要磁盘或网络仍有活动，就应继续等待。
 
 #tip[
-  最省时的做法是一次性等待它完成，然后不再想它。中途反复中断容易留下
-  E.1.2 那种索引与锁文件的残留状态，反而更费时间。
+  尽量让首次下载与检出一次完成。反复中断容易留下 E.1.2 所述的空索引或锁文件，
+  后续恢复所花的时间往往比继续等待更长。
 ]
 
 验证库是否真的就绪，应先检查该子模块列出的全部 LFS 路径：
@@ -221,7 +225,7 @@ $ make.bat ninja
 上面的写法适用于 `cmd.exe`。PowerShell 要写 `./make.bat ninja`，Git Bash 也写
 `./make.bat ninja`；不要让 GNU Make 去处理源码根目录的 `GNUmakefile`。
 
-两者的语义是对齐的（同样的构建类型、同样的配置预览文件），只是入口脚本与
+两者的语义是对齐的（同样的构建类型、同样的配置预设），只是入口脚本与
 环境检测方式不同。#mac #linux 用 `make`，#win 用 `make.bat` —— 记这一条就够。
 
 === E.2.2 改了 CMake 选项却不生效
@@ -229,13 +233,16 @@ $ make.bat ninja
 CMake 把缓存写在构建目录里，改选项后必须让它重新配置。用 `make.bat nobuild`（#win）
 可以只生成或重新配置工程而不编译。#mac #linux 的 `make config` 含义不同：它只会对
 *已有构建目录*打开 `cmake-gui` 或 `ccmake`，让你编辑缓存并手动重新配置；它不能从零
-创建构建目录。首次配置应运行 `make`，或直接使用 `cmake -S <源码> -B <构建目录>`。
-如果怀疑缓存本身有问题，删掉构建目录重来往往比排查更快。
+创建构建目录。首次配置应运行平台对应的官方构建入口；只有在已经理解 Blender 的配置
+预设与依赖路径时，才适合直接使用 `cmake -S <源码> -B <构建目录>`。
+
+重新配置后仍无效时，用 `cmake -LA -N <构建目录>` 查看缓存中的最终值，并检查是否被
+构建档位的预设再次覆盖。只有确认缓存已经互相矛盾或指向旧路径时，才需要删除整个构建目录。
 
 === E.2.3 想更快地增量构建
 
 - 首次构建成功后，构建目录里会生成 `rebuild.cmd`（#win）。它自己会激活编译器环境，
-  直接运行它即可增量重建，比再走一遍 `make.bat` 快。
+  直接运行它即可增量重建，省去 `make.bat` 的环境探测与重新配置步骤。
 - 编译缓存能显著缩短重复构建时间：`make.bat ninja sccache`（#win）与 `make ccache`（#mac #linux）。
 - 只改了几个文件时，让构建系统自己决定要重编什么，不要动辄 `clean`。
 
@@ -271,8 +278,10 @@ Windows 的构建脚本会主动检查并拒绝含空格的路径。把源码放
 
 === E.3.1 一启动就崩，怀疑是插件
 
-用 `-X` / `--factory-startup` 以出厂设置启动，它会*忽略用户配置与已启用的插件*。
-如果这样能正常启动，问题就在插件或用户配置里，再逐个启用来定位。
+用 `-X` / `--factory-startup` 以出厂设置启动。它会跳过用户的 `startup.blend`，载入默认偏好，
+因此也不会按用户偏好启用插件。如果这样能正常启动，问题范围就缩小到了用户启动文件、偏好
+或已启用插件；恢复普通启动后逐项排除即可。如果仍然崩溃，则应继续检查 GPU 后端、驱动、
+命令行参数以及当前构建本身。
 
 ```bash
 $ blender -X
@@ -286,10 +295,9 @@ Blender 默认不会因为 Python 脚本抛异常而返回非零退出码。批�
 $ blender --background --python-exit-code 1 --python my_script.py
 ```
 
-=== E.3.3 依赖图到底在干什么
+=== E.3.3 怎样判断依赖图把时间花在哪里
 
-依赖图有一整套专用调试参数，第一次排查建议先用「带耗时」的那个，它能告诉你时间
-花在哪个环节：
+依赖图有一整套专用调试参数。先启用耗时输出，判断瓶颈属于关系更新还是节点求值：
 
 ```bash
 $ blender --background --debug-depsgraph-time my_file.blend
@@ -322,13 +330,15 @@ $ blender --log "*,^operator"    # 除 operator 之外的全部
 
 === E.4.1 改了插件代码却不生效
 
-Python 解释器会缓存已导入的模块。改完代码通常有两条路：
+Python 解释器会缓存已导入的模块，而禁用插件通常只调用 `unregister()`，不会把整棵模块
+从 `sys.modules` 删除。因此「禁用后再启用」不等于重新导入代码。
 
-- *退出并重启 Blender*（最可靠）；
-- 在脚本编辑器里*手工重载*模块，或先禁用再启用插件。
+- *退出并重启 Blender*：最可靠，适合改了注册结构、模块依赖或全局状态之后；
+- *显式重载模块*：适合开发期的小改动，但必须先按相反顺序注销旧类与回调，再按依赖顺序
+  重载子模块并重新注册。
 
-第二种方式更快，但对「模块级常量」「已注册的类」这类东西并不总是彻底 ——
-类的注册与注销有顺序依赖，重载后容易出现新旧实现混在一起的情况。
+如果重载后出现「类已经注册」「属性已经存在」或新旧行为混杂，不要继续叠加 `reload()`；
+重启 Blender，先恢复到只有一份模块与注册对象的干净状态。
 
 #tip[
   如果你在频繁迭代，把插件代码写成一个*独立进程可测试*的形式（核心逻辑不依赖
@@ -339,9 +349,11 @@ Python 解释器会缓存已导入的模块。改完代码通常有两条路：
 
 `unregister()` 必须把 `register()` 做过的事*全部且按相反顺序*撤销。常见遗漏有：
 
-- 注册了类却忘了从 `bpy.types` 注销；
+- 用 `bpy.utils.register_class()` 注册了类，却没有对应调用 `bpy.utils.unregister_class()`；
 - 往菜单或快捷键里加了条目，但没有移除；
-- 注册了定时器（`bpy.app.timers`）或处理器（`bpy.app.handlers`）却没有反注册。
+- 注册了定时器（`bpy.app.timers`）、处理器（`bpy.app.handlers`）或消息总线订阅，
+  却没有反注册或按 owner 清理；
+- 给 `bpy.types.Scene` 等现有类型添加了属性，却没有用 `del` 删除。
 
 判断标准很简单：*启用 → 禁用 → 再启用*，如果第二次启用报「已存在」之类的错误，
 就是卸载不干净。
@@ -358,27 +370,35 @@ Python 解释器会缓存已导入的模块。改完代码通常有两条路：
 === E.4.4 `bpy.props` 的属性定义改了没反应
 
 属性是在类注册时被登记的，`bpy.props` 的定义属于「注册元数据」而不是普通数据。
-改了属性定义（类型、取值范围、枚举项）通常必须重启 Blender 才生效 ——
-这与上一节「改了函数体可以重载」是两回事。
+改了属性类型、取值范围或枚举项后，需要先完整注销旧类，再重载模块并重新注册；挂在
+`bpy.types.Scene` 等现有类型上的指针属性也要先删除。若旧类已经因异常而无法正常注销，
+重启 Blender 是恢复干净注册状态最稳妥的办法。这与只修改普通函数体不同。
 
 === E.4.5 多文件插件的导入失败
 
-多文件插件的包名是它会话内唯一的标识。常见问题是写成了「相对导入看起来能用、
-实际上依赖了当前工作目录」。稳妥做法是始终使用相对导入（`from . import xxx`），
-并且不要在模块导入时执行有副作用的 Blender API 调用（那些应该放在 `register()` 里）。
+多文件插件应把自身当作一个 Python 包。包内引用统一使用相对导入，例如
+`from . import operators`；不要通过修改 `sys.path` 或依赖当前工作目录来寻找相邻模块。
+模块导入阶段也不要执行注册类、修改菜单等有副作用的 Blender API 调用，这些操作应集中在
+`register()` 中，并在 `unregister()` 中逐项撤销。
 
 == E.5 C++ 源码修改
 
 === E.5.1 改完数据但界面不刷新
 
-改完数据后必须*发通知*，界面才会重绘。不发通知的典型症状是：数据确实变了
-（在 Python 控制台里能读到新值），但视图一动不动，直到你手动移动一下视角。
+直接修改 C/C++ 数据后，通常要处理两类更新：
+
+- *数据与求值更新*：用相应的 tag 告诉依赖图哪些结果已经失效；
+- *界面更新*：发送 notifier，或在只影响局部绘制时标记对应区域重绘。
+
+只做前者，数据可能已经重新求值但界面没有立即刷新；只做后者，界面可能仍在显示旧的求值结果。
+典型症状是 Python 控制台能读到新值，但视图要等到切换模式或移动视角后才变化。应先参考同类
+属性的 RNA update 回调或相邻操作符，复用它们采用的 tag 与 notifier，而不是随意选择一个通知。
 
 这是第 11 章的重点之一，请参考 §11.3。
 
 === E.5.2 撤销不工作
 
-C++ 侧的操作符必须显式声明它要进入撤销栈，靠的是 `ot->flag` 里的两个位：
+C++ 侧会修改可撤销数据的操作符，需要在 `ot->flag` 中声明注册与撤销能力：
 
 ```cpp
 /* source/blender/windowmanager/WM_types.hh:184, :186 */
@@ -394,8 +414,12 @@ ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 的 `"REGISTER"` 与 #src("source/blender/makesrna/intern/rna_wm.cc:557") 的 `"UNDO"`。
 也就是说：Python 写 `bl_options = {'REGISTER', 'UNDO'}`，等价于 C 侧设这两个位。
 
-撤销栈的实际判断逻辑在 #src("source/blender/windowmanager/intern/wm_event_system.cc")，
-其中多处按 `OPTYPE_UNDO` 分支（例如 `:1307`、`:1396`、`:1699`），值得对照阅读。
+这两个标志只是让窗口管理器知道如何处理该操作符。若数据在错误阶段修改，或直接写入未被
+撤销系统接管的内存，它们并不能自动补出一条正确的撤销记录。若标志已经设置但撤销仍无效，
+应继续检查数据修改是否发生在操作符执行期间，以及同类内置操作符是否还调用了专用的 undo API。
+
+撤销栈的判断逻辑在 #src("source/blender/windowmanager/intern/wm_event_system.cc")，
+其中多处按 `OPTYPE_UNDO` 分支（例如 `:1307`、`:1396`、`:1699`）。
 
 === E.5.3 给 DNA 加了字段之后的兼容问题
 
@@ -418,7 +442,7 @@ DNA + RNA + 版本迁移的联动做法，详见 §9.2 与 §9.6。
 附录 C.5 列出了这几种套路的具体检索方式。
 
 #summary[
-  本附录里最值得记住的三条：*#win 用 `make.bat` 而不是 `make`*；
-  *排查问题先加 `-X` 排除插件与用户配置干扰*；
-  *改完数据一定要发通知，否则界面不会刷新*。
+  排错时先缩小范围：源码获取失败，分别检查 Git 对象、Git LFS 与平台库；构建失败，先确认
+  平台入口、缓存值和工具链；启动异常，用 `-X` 排除用户状态；插件异常，区分模块缓存与注册
+  残留；C++ 修改没有生效，则分别检查依赖图 tag、界面通知与撤销声明。
 ]

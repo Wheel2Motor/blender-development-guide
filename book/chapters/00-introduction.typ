@@ -1,7 +1,7 @@
 #import "../common.typ": *
 #import "../figures/roadmap.typ": fig-roadmap
 
-= 第 0 章 导论
+= 第 0 章　导论
 
 在选择实现路径之前，先要回答两个问题：*Blender 的内部结构是什么样的*，以及
 *目标功能是否有合适的扩展入口*。如果第二个问题没有答案，过早动手很容易造成返工：
