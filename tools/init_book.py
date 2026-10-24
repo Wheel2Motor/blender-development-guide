@@ -6,9 +6,9 @@
 
 1. 找 Typst（PATH 或 ``tools/bin/``）、打印版本；
 2. 默认在项目字体目录为空时下载内置的 Noto 字体组；已有字体文件直接使用，不校验
-   哈希或版本。``book/fonts/noto.json`` 只定义正文和代码槽位的字体族名称。
+   哈希或版本。``book/fonts/fonts.json`` 只定义正文和代码槽位的字体族名称。
    ``--use-system-fonts`` 则读取
-   ``system-fallbacks.json`` 并选择本机已有字体，不下载项目字体；
+   ``fonts-system-fonts.json`` 并选择本机已有字体，不下载项目字体；
 3. 建目录骨架（``book/build`` 尤其重要：Typst 不会自己创建输出目录）；
 4. 预取 cetz 宏包 —— **用临时目录里的最小探针文件**，不碰书稿、不产出书稿 PDF。
 
@@ -32,7 +32,7 @@ init 会编译一次全书来预取 cetz，那既慢又会让"初始化"意外�
   打印官方安装命令并以**非零退出码**结束；可选依赖缺失只提示，不影响退出码。
 
 内置 Noto 字体组的下载地址、压缩包成员和目标文件名只在本脚本中维护；
-``book/fonts/noto.json`` 只保存 Typst 的正文与代码字体槽位。用户可以把自己的
+``book/fonts/fonts.json`` 只保存 Typst 的正文与代码字体槽位。用户可以把自己的
 ``.ttf``、``.otf``、``.ttc`` 或 ``.otc`` 文件放入 ``book/fonts/``，再把配置改为
 Typst 识别出的字体族名称。已有字体文件直接使用，不检查哈希或版本。
 
@@ -52,7 +52,7 @@ import sys
 import tempfile
 import zipfile
 
-from font_config import FONT_DIR, NOTO_CONFIG, load_noto_config
+from font_config import FONT_DIR, PROJECT_CONFIG, load_project_config
 
 TYPST_RECOMMENDED = "0.15.1"   # 本工程在这一版上验证过
 CETZ_VERSION = "0.3.4"         # book/figures/*.typ 与 chapters/01-architecture.typ 里 import 的版本
@@ -196,10 +196,10 @@ def check_typst() -> str | None:
 # 2) 字体：槽位配置 + 默认 Noto 下载器
 # ---------------------------------------------------------------------------
 try:
-    NOTO_FONT_CONFIG = load_noto_config()
+    PROJECT_FONT_CONFIG = load_project_config()
     FONT_CONFIG_ERROR = None
 except ValueError as exc:
-    NOTO_FONT_CONFIG = {}
+    PROJECT_FONT_CONFIG = {}
     FONT_CONFIG_ERROR = str(exc)
 
 # JSON 只描述 Typst 槽位；自动下载的默认资产属于初始化实现细节，集中留在这里。
@@ -395,8 +395,8 @@ def project_font_files() -> list[str]:
 def uses_default_font_slots() -> bool:
     """Whether the editable slot config still requests the built-in Noto profile."""
     return (
-        tuple(NOTO_FONT_CONFIG.get("body", ())) == DEFAULT_BODY_FONTS
-        and tuple(NOTO_FONT_CONFIG.get("code", ())) == DEFAULT_CODE_FONTS
+        tuple(PROJECT_FONT_CONFIG.get("body", ())) == DEFAULT_BODY_FONTS
+        and tuple(PROJECT_FONT_CONFIG.get("code", ())) == DEFAULT_CODE_FONTS
     )
 
 
@@ -404,7 +404,7 @@ def check_fonts(check_only: bool, heading: str | None = None) -> bool:
     print()
     print(heading or
           "== 2. Fonts (all shipped in book/fonts/; build uses --ignore-system-fonts) ==")
-    say(INFO, "Configuration: %s" % NOTO_CONFIG)
+    say(INFO, "Configuration: %s" % PROJECT_CONFIG)
     if FONT_CONFIG_ERROR:
         say(BAD, "Font configuration is invalid: %s" % FONT_CONFIG_ERROR)
         return False
@@ -426,7 +426,7 @@ def check_fonts(check_only: bool, heading: str | None = None) -> bool:
     if not uses_default_font_slots():
         say(INFO, "Custom font slots are configured; the built-in Noto downloader is disabled.")
         say(BAD, "No .ttf, .otf, .ttc, or .otc file was found in book/fonts/.")
-        say(INFO, "Copy your font files there and set body/code family names in noto.json.")
+        say(INFO, "Copy your font files there and set body/code family names in fonts.json.")
         say(INFO, "Use 'typst fonts --font-path book/fonts --ignore-system-fonts'")
         say(INFO, "to see the family names Typst recognizes.")
         return False

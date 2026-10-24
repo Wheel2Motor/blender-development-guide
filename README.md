@@ -25,7 +25,7 @@ scons build-book
 `book/build/blender-development-guide.pdf`。
 
 网络状况可能导致默认字体拉取失败。此时可以自行下载 Typst 支持的 `.ttf`、`.otf`、
-`.ttc` 或 `.otc` 字体并放入 `book/fonts/`，再在 `book/fonts/noto.json` 中填写字体的
+`.ttc` 或 `.otc` 字体并放入 `book/fonts/`，再在 `book/fonts/fonts.json` 中填写字体的
 内部 family name；文件名可以不同。也可以完全跳过项目字体：
 
 ```bash

@@ -10,8 +10,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK = os.path.join(ROOT, "book")
 FONT_DIR = os.path.join(BOOK, "fonts")
-NOTO_CONFIG = os.path.join(FONT_DIR, "noto.json")
-SYSTEM_CONFIG = os.path.join(FONT_DIR, "system-fallbacks.json")
+PROJECT_CONFIG = os.path.join(FONT_DIR, "fonts.json")
+SYSTEM_FONTS_CONFIG = os.path.join(FONT_DIR, "fonts-system-fonts.json")
 
 
 def platform_key() -> str:
@@ -35,27 +35,28 @@ def _load(path: str, expected_mode: str) -> dict:
     return data
 
 
-def load_noto_config() -> dict:
+def load_project_config() -> dict:
     try:
-        with open(NOTO_CONFIG, encoding="utf-8") as fh:
+        with open(PROJECT_CONFIG, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError) as exc:
         raise ValueError(
-            "cannot read font configuration %s: %s" % (NOTO_CONFIG, exc)) from exc
+            "cannot read font configuration %s: %s" % (PROJECT_CONFIG, exc)) from exc
     if not isinstance(data, dict):
-        raise ValueError("project font configuration must be a JSON object: %s" % NOTO_CONFIG)
+        raise ValueError(
+            "project font configuration must be a JSON object: %s" % PROJECT_CONFIG)
     for key in ("body", "code"):
         value = data.get(key)
         if not isinstance(value, list) or not value or not all(
                 isinstance(item, str) and item.strip() for item in value):
             raise ValueError(
-                "Noto font configuration %r must be a non-empty string list: %s"
-                % (key, NOTO_CONFIG))
+                "project font configuration %r must be a non-empty string list: %s"
+                % (key, PROJECT_CONFIG))
     return data
 
 
-def load_system_config() -> dict:
-    data = _load(SYSTEM_CONFIG, "system")
+def load_system_fonts_config() -> dict:
+    data = _load(SYSTEM_FONTS_CONFIG, "system")
     platforms = data.get("platforms")
     if not isinstance(platforms, dict) or platform_key() not in platforms:
         raise ValueError("system font configuration has no entry for %s" % platform_key())

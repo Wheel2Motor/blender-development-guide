@@ -34,7 +34,7 @@ book/build/
 #
 # 但下面这些**要入库**：
 #   * LICENSE-*.txt / OFL-*.txt —— OFL 要求分发时保留版权与许可声明，只有几 KB；
-#   * noto.json / system-fallbacks.json —— 两种模式的字体槽位配置。
+#   * fonts.json / fonts-system-fonts.json —— 两种模式的字体槽位配置。
 # 所以这里只忽略二进制扩展名，不要写成整目录 `book/fonts/`。
 book/fonts/*.ttf
 book/fonts/*.otf

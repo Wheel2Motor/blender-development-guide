@@ -47,11 +47,11 @@
 // 字体与调色板
 // ---------------------------------------------------------------------------
 // 字体槽位由两份 JSON 配置之一提供：
-//   * fonts/noto.json             项目字体的正文/代码字体栈；
-//   * fonts/system-fallbacks.json 不同系统的候选 fallback chain。
+//   * fonts/fonts.json              项目字体的正文/代码字体栈；
+//   * fonts/fonts-system-fonts.json 不同系统的候选 fallback chain。
 // 默认直接读取 Noto 配置。`--use-system-fonts` 由构建脚本选择系统配置、枚举本机实际安装
 // 的字体，再通过 Typst 原生的 `sys.inputs` 传入已解析的正文与代码字体栈。
-#let font-config-path = sys.inputs.at("font-config", default: "fonts/noto.json")
+#let font-config-path = sys.inputs.at("font-config", default: "fonts/fonts.json")
 #let font-config = json(font-config-path)
 #let configured-font-list(name, default: ()) = {
   let encoded = sys.inputs.at(name, default: "")

@@ -35,7 +35,7 @@ book/build/blender-development-guide.pdf
 拉取。字体先下载到临时目录，直链必须生成非空文件，ZIP 必须能打开并包含目标成员，然后
 才会原子安装；不检查哈希或字体版本。
 
-`book/fonts/noto.json` 不保存下载信息。只要 `book/fonts/` 中已有用户提供的字体文件，
+`book/fonts/fonts.json` 不保存下载信息。只要 `book/fonts/` 中已有用户提供的字体文件，
 就会直接使用；文件是否能覆盖书稿字符最终由 Typst 编译决定。若改用了自定义槽位，
 `init-book` 不会擅自下载默认 Noto 字体，用户需要自行放入字体文件。
 
@@ -128,8 +128,8 @@ examples/
 
 项目使用两份 JSON 配置，分别覆盖两种字体来源：
 
-- `book/fonts/noto.json`：项目字体的正文与代码字体槽位；
-- `book/fonts/system-fallbacks.json`：Windows、macOS 与 Linux 的正文和等宽字体候选链。
+- `book/fonts/fonts.json`：项目字体的正文与代码字体槽位；
+- `book/fonts/fonts-system-fonts.json`：Windows、macOS 与 Linux 的正文和等宽字体候选链。
 
 项目字体配置刻意保持简单，例如：
 
@@ -151,7 +151,7 @@ fallback chain：Typst 先尝试数组中的第一个字体族；当前字符没
 
 Typst 没有独立的字体配置文件格式，但 `text(font: (...))` 原生支持有顺序的字体族数组，
 并能通过 `sys.inputs` 接收外部配置。构建脚本根据 `--use-system-fonts` 选择上述配置：默认
-模式通过 `--font-path` 发现 `book/fonts/`，书稿直接读取 `noto.json` 的槽位；系统字体模式
+模式通过 `--font-path` 发现 `book/fonts/`，书稿直接读取 `fonts.json` 的槽位；系统字体模式
 先运行 `typst fonts`，从当前平台的候选链中筛出实际存在的字体，再通过 `sys.inputs` 把
 结果交给书稿。HTML 导出还会查询 Typst 识别出的字体文件与字重，复制相应文件并生成
 `@font-face`，因此 PDF、CeTZ 图和 HTML 样式共用同一套槽位定义。
@@ -195,7 +195,7 @@ Mono，再用 Noto Sans Mono CJK SC 补齐中文，最后以 Noto Sans 兜底。
 时要重新检查代码对齐、缺字与分页。每一处显式 `#set text` 都应指定 `weight`，避免字体
 变化后意外使用细体。
 
-系统字体候选以 `system-fallbacks.json` 为准，不在文档中复制一份容易失效的列表。正文或
+系统字体候选以 `fonts-system-fonts.json` 为准，不在文档中复制一份容易失效的列表。正文或
 等宽候选全部缺失时，构建会明确失败。系统字体的本机使用权不自动包含嵌入与再分发权；
 选择该模式前应核对实际命中的字体许可，并且不要用它生成正式发布包。
 

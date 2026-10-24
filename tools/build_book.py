@@ -50,10 +50,10 @@ import tempfile
 import time
 
 from font_config import (
-    NOTO_CONFIG,
-    SYSTEM_CONFIG,
-    load_noto_config,
-    load_system_config,
+    PROJECT_CONFIG,
+    SYSTEM_FONTS_CONFIG,
+    load_project_config,
+    load_system_fonts_config,
     platform_key,
     typst_relative,
 )
@@ -83,15 +83,15 @@ FONT_SUFFIXES = (".ttf", ".otf", ".ttc", ".otc")
 #                           而不是被 DejaVu / Libertinus 悄悄顶掉。
 PROJECT_FONT_ARGS = [
     "--font-path", FONTS, "--ignore-system-fonts", "--ignore-embedded-fonts",
-    "--input", "font-config=" + typst_relative(NOTO_CONFIG),
+    "--input", "font-config=" + typst_relative(PROJECT_CONFIG),
 ]
 
 try:
-    NOTO_FONT_CONFIG = load_noto_config()
-    SYSTEM_FONT_CONFIG = load_system_config()
+    PROJECT_FONT_CONFIG = load_project_config()
+    SYSTEM_FONT_CONFIG = load_system_fonts_config()
     FONT_CONFIG_ERROR = None
 except ValueError as exc:
-    NOTO_FONT_CONFIG = {}
+    PROJECT_FONT_CONFIG = {}
     SYSTEM_FONT_CONFIG = {}
     FONT_CONFIG_ERROR = str(exc)
 
@@ -225,7 +225,7 @@ def system_font_args(exe: str) -> tuple[list[str], list[str], list[str]] | None:
     say(INFO, "System-font mode is machine-dependent; use configured Noto fonts for releases.")
     args = [
         "--ignore-embedded-fonts",
-        "--input", "font-config=" + typst_relative(SYSTEM_CONFIG),
+        "--input", "font-config=" + typst_relative(SYSTEM_FONTS_CONFIG),
         "--input", "font-platform=" + platform_key(),
         "--input", "font-body=" + ";".join(body),
         "--input", "font-code=" + ";".join(code),
@@ -679,7 +679,7 @@ def verify_project_fonts() -> bool:
     say(BAD, "Project fonts are not prepared for the selected slot configuration.")
     say(INFO, "The build never downloads or repairs fonts. Prepare them first:")
     say(INFO, "  scons init-book")
-    say(INFO, "You may also copy supported font files into book/fonts/ and edit noto.json.")
+    say(INFO, "You may also copy supported font files into book/fonts/ and edit fonts.json.")
     return False
 
 
@@ -764,8 +764,8 @@ def main() -> int:
         say(OK, "Using %d project font file(s) from %s; system fonts are ignored."
             % (len(font_files), FONTS))
         font_args = PROJECT_FONT_ARGS
-        html_body_fonts = list(NOTO_FONT_CONFIG["body"]) + ["sans-serif"]
-        html_code_fonts = list(NOTO_FONT_CONFIG["code"]) + ["monospace"]
+        html_body_fonts = list(PROJECT_FONT_CONFIG["body"]) + ["sans-serif"]
+        html_code_fonts = list(PROJECT_FONT_CONFIG["code"]) + ["monospace"]
         html_font_faces = []
 
     if args.format == "html":
@@ -775,7 +775,7 @@ def main() -> int:
             return 1
         if not args.use_system_fonts:
             families = list(dict.fromkeys(
-                NOTO_FONT_CONFIG["body"] + NOTO_FONT_CONFIG["code"]))
+                PROJECT_FONT_CONFIG["body"] + PROJECT_FONT_CONFIG["code"]))
             copied_faces = copy_html_fonts(exe, families)
             if copied_faces is None:
                 return 1

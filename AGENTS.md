@@ -57,7 +57,8 @@ scons build-book --release
   横向溢出。因此它要求已经通过 `scons init-blender` 准备好 `blender/`。
 - `--release` 只发布 PDF 与 `examples/`，不得把中间产物、检查报告或字体打入发布包。
 
-字体槽位的唯一配置是 `book/fonts/noto.json` 与 `book/fonts/system-fallbacks.json`。
+字体槽位的唯一配置是 `book/fonts/fonts.json` 与
+`book/fonts/fonts-system-fonts.json`。
 两份 JSON 只保存 Typst 字体族槽位，不记录下载地址、文件名、哈希或版本。默认 Noto
 字体组的下载实现集中在 `tools/init_book.py`；已有 `.ttf`、`.otf`、`.ttc` 或 `.otc`
 项目字体直接使用。系统字体模式从对应平台的候选链筛选本机已有字体。调整排版字体时改
