@@ -23,6 +23,9 @@
   paper: "a4",
   margin: (x: 2.3cm, top: 2.5cm, bottom: 2.2cm),
   header: context {
+    // 每页从 1 重新开始编号；同一页内的脚注仍按出现顺序递增。
+    counter(footnote).update(0)
+
     // 取"当前页或之前最后一个一级标题"作为本章标题。
     // 不用 .before()：Typst 的 query() 返回数组，没有该方法。
     let cur = none
@@ -67,8 +70,49 @@
   text.text.replace(regex("[ \\t]+"), "")
 }
 
-// 脚注承载不影响主线的短解释。
-#show footnote.entry: set text(font: font-zh, size: 8.5pt, weight: 400)
+// 脚注承载不影响主线的短解释。正文与页底均使用圆圈编号，正文标记抬到右上角，
+// 页底则按常规脚注字号排列。
+#show footnote: it => context {
+  let number = counter(footnote).display(at: it.location(), "1")
+  super(
+    box(
+      move(
+        dy: -0.62em,
+        circle(
+          width: 0.78em,
+          height: 0.78em,
+          stroke: 0.05em + black,
+          inset: 0pt,
+        )[
+          #set align(center + horizon)
+          #set text(size: 0.78em, weight: 500)
+          #move(dy: 0.22em)[#number]
+        ],
+      ),
+    ),
+  )
+}
+#show footnote.entry: it => context {
+  set text(font: font-zh, size: 8.5pt, weight: 400)
+  let number = counter(footnote).display(at: it.note.location(), "1")
+  grid(
+    columns: (1em, 1fr),
+    column-gutter: 0.28em,
+    align(center + top)[
+      #circle(
+        width: 0.92em,
+        height: 0.92em,
+        stroke: 0.055em + black,
+        inset: 0pt,
+      )[
+        #set align(center + horizon)
+        #set text(size: 0.78em, weight: 500)
+        #number
+      ]
+    ],
+    it.note.body,
+  )
+}
 
 // 章节编号一律手写在标题文本里，避免「自动编号 + 手写编号」双重编号
 #set heading(numbering: none)

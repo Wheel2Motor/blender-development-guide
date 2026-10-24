@@ -40,12 +40,15 @@ https://projects.blender.org/blender/blender.git
 
 命令成功只说明分支存在，不能证明前言所列的固定提交已经同步。已经安装 Git LFS 时，
 直接克隆不提供 LFS 对象的镜像，还可能在 Git 对象下载完成后才在 checkout 阶段失败。
-因此应先跳过 LFS smudge。#linux 与 #mac 使用：
+因此应先跳过 LFS smudge#footnote[
+  `smudge` 是 Git 在 checkout 时运行的内容过滤步骤。对 Git LFS 而言，它会读取仓库中的
+  小型指针文件，再下载对应的大文件并写入工作区。设置 `GIT_LFS_SKIP_SMUDGE=1` 只会暂缓
+  这次自动下载与替换，使工作区暂时保留指针文件；克隆完成后仍可用 `git lfs pull` 补齐。
+]。#linux 与 #mac 使用：
 
 #raw(
   "$ export GIT_LFS_SKIP_SMUDGE=1\n"
-  + "$ git clone --branch " + blender-branch + " \\\n"
-  + "    --single-branch <镜像 URL> blender\n"
+  + "$ git clone --branch " + blender-branch + " --single-branch <镜像 URL> blender\n"
   + "$ unset GIT_LFS_SKIP_SMUDGE",
   block: true,
   lang: "bash",
@@ -55,8 +58,7 @@ https://projects.blender.org/blender/blender.git
 
 #raw(
   "$env:GIT_LFS_SKIP_SMUDGE = \"1\"\n"
-  + "git clone --branch " + blender-branch + " `\n"
-  + "  --single-branch <镜像 URL> blender\n"
+  + "git clone --branch " + blender-branch + " --single-branch <镜像 URL> blender\n"
   + "Remove-Item Env:GIT_LFS_SKIP_SMUDGE",
   block: true,
   lang: "powershell",
@@ -69,8 +71,7 @@ https://projects.blender.org/blender/blender.git
     "$ cd blender\n"
     + "$ git cat-file -e " + blender-commit + "^{commit}\n"
     + "$ git switch --detach " + blender-commit + "\n"
-    + "$ git remote add lfs-fallback \\\n"
-    + "    https://projects.blender.org/blender/blender.git\n"
+    + "$ git remote add lfs-fallback https://projects.blender.org/blender/blender.git\n"
     + "$ git config lfs.remote.searchall true\n"
     + "$ git lfs pull lfs-fallback\n"
     + "$ git rev-parse HEAD\n"
