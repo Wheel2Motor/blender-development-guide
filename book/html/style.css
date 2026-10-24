@@ -1,9 +1,5 @@
 :root {
   color-scheme: light;
-  --book-font-body: "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
-    "Hiragino Sans GB", "Source Han Sans SC", system-ui, sans-serif;
-  --book-font-code: "Noto Sans Mono", "Noto Sans Mono CJK SC", "Cascadia Mono",
-    "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --book-canvas: #eef3f8;
   --book-page: #ffffff;
   --book-ink: #1b2430;

@@ -24,7 +24,7 @@ from SCons.Script import (
 ROOT = Path(Dir("#").abspath)
 
 COMMANDS = {
-    "init-book": ("tools/init_book.py", "Prepare Typst, pinned fonts, and the book workspace."),
+    "init-book": ("tools/init_book.py", "Prepare Typst, configured fonts, and the book workspace."),
     "build-book": ("tools/build_book.py", "Build the PDF or experimental HTML output."),
     "init-blender": (
         "tools/init_blender.py",
@@ -59,12 +59,12 @@ Commands:
 init-book options:
   --check-only          Inspect without creating directories or downloading fonts.
                         Also accepted by init-blender (inspect only, never clones).
-  --force               Ignore the font manifest and re-verify every font file.
   --use-system-fonts    Skip the project font download; check installed OS fonts.
 
 build-book options:
   --format=FORMAT       Output format: pdf (default) or html (experimental).
-  --check               Render every page and scan for margin overflow (slow).
+  --check               Validate source references against the pinned Blender checkout,
+                        then render every page and scan for margin overflow (slow).
   --release             Build the public PDF plus examples/ release directory.
   --use-system-fonts    Preview with installed OS fonts (same switch as init-book).
 
@@ -119,17 +119,15 @@ Examples:
 
 
 AddOption("--check", dest="book_check", action="store_true", default=False,
-          help="render every book page and run the overflow scan")
+          help="validate pinned source references, render every page, and scan overflow")
 AddOption("--format", dest="book_format", type="choice", choices=("pdf", "html"),
           default="pdf", help="book output format: pdf or experimental html")
 AddOption("--release", dest="book_release", action="store_true", default=False,
           help="build the public PDF plus examples/ release directory")
 AddOption("--use-system-fonts", dest="use_system_fonts", action="store_true", default=False,
-          help="use installed OS font fallbacks rather than pinned project fonts")
+          help="use installed OS font fallbacks rather than configured Noto fonts")
 AddOption("--check-only", dest="check_only", action="store_true", default=False,
           help="inspect initialization state without downloading or writing")
-AddOption("--force", dest="force_fonts", action="store_true", default=False,
-          help="re-verify every project font during init-book")
 AddOption("--src", dest="source_dir", type="string", default=None,
           help="override the Blender source directory")
 AddOption("--mirror", dest="blender_mirror", type="choice",
@@ -181,8 +179,6 @@ def _script_args(alias: str) -> list[str]:
     elif alias == "init-book":
         if GetOption("check_only"):
             args.append("--check-only")
-        if GetOption("force_fonts"):
-            args.append("--force")
         if GetOption("use_system_fonts"):
             args.append("--use-system-fonts")
     elif alias == "init-blender":
@@ -260,11 +256,7 @@ def _run_script(target, source, env) -> int:  # noqa: ANN001
         return 2
     if release and GetOption("use_system_fonts"):
         print("[FAIL] --release and --use-system-fonts are mutually exclusive; "
-              "release builds require pinned project fonts.")
-        return 2
-    if alias == "init-book" and GetOption("force_fonts") and GetOption("use_system_fonts"):
-        print("[FAIL] --force and --use-system-fonts are mutually exclusive; "
-              "there are no project fonts to verify in system-font mode.")
+              "release builds require the configured Noto fonts.")
         return 2
     script = ROOT / ("tools/build_book_release.py" if release else COMMANDS[alias][0])
     command = [sys.executable, str(script), *_script_args(alias)]

@@ -27,20 +27,23 @@ book/build/
 # PDF 都是可重新生成的构建或发布产物，任何目录下的 PDF 均不得入库。
 *.pdf
 
-# ---- 三之二、书稿字体：只忽略二进制，许可与清单入库 ----
+# ---- 三之二、书稿字体：只忽略二进制，许可与配置入库 ----
 # 字体二进制很大（约 50 MB：Noto Sans SC 两份 OTF + Noto Sans Mono CJK SC 两份 OTF），
 # 而且都是官方产物、可重新下载，所以**不入库**。构建要用它们才能不看系统字体：
-#   python tools/init_book.py      # 下载 + 校验（幂等，已存在且校验通过就跳过）
+#   python tools/init_book.py      # 字体目录为空时下载默认组；已有文件直接使用
 #
 # 但下面这些**要入库**：
 #   * LICENSE-*.txt / OFL-*.txt —— OFL 要求分发时保留版权与许可声明，只有几 KB；
-#   * .manifest.json            —— 记录每个字体的 sha256 与来源 URL，
-#                                  是"字体从哪来、如何校验"的可复现依据。
+#   * noto.json / system-fallbacks.json —— 两种模式的字体槽位配置。
 # 所以这里只忽略二进制扩展名，不要写成整目录 `book/fonts/`。
 book/fonts/*.ttf
 book/fonts/*.otf
 book/fonts/*.ttc
 book/fonts/*.otc
+book/fonts/**/*.ttf
+book/fonts/**/*.otf
+book/fonts/**/*.ttc
+book/fonts/**/*.otc
 
 # ---- 四、可选的本地工具链固定位置（脚本只"查找"，从不下载）----
 # 工程**不下载任何 CLI 工具**：Typst 请你自己装到 PATH 上。这个目录只是给

@@ -57,7 +57,7 @@
   spacing: 1.15em,
 )
 
-#set text(font: font-zh, size: 10.5pt, weight: 400, lang: "zh", region: "cn")
+#set text(font: font-zh, fallback: false, size: 10.5pt, weight: 400, lang: "zh", region: "cn")
 
 // 脚注承载不影响主线的短解释。
 #show footnote.entry: set text(font: font-zh, size: 8.5pt, weight: 400)

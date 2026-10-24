@@ -46,60 +46,26 @@
 // ---------------------------------------------------------------------------
 // 字体与调色板
 // ---------------------------------------------------------------------------
-// 默认字体**由工程自带**（`book/fonts/`，全部 SIL OFL，可自由嵌入分发），构建时必须加
-//   --font-path book/fonts --ignore-system-fonts --ignore-embedded-fonts
-// 三条缺一不可：
-//   * --font-path             指向工程字体目录（由 init-book 下载，见 .gitignore）；
-//   * --ignore-system-fonts   完全不看系统字体 —— 这是排除 LiSu（隶书，商业字体）
-//                             这类系统回退的关键，也是构建可复现的前提；
-//   * --ignore-embedded-fonts 连 Typst 内置的 DejaVu Sans Mono / Libertinus Serif
-//                             也不参与回退，任何缺字都必须显式暴露而不是被顶掉。
-// 一个字符都不许落到工程之外。开发者显式使用 `--use-system-fonts` 时，构建脚本先枚举
-// 本机字体，再把真实存在的 family 通过以下 inputs 传入；不存在的候选不会进入书稿：
-//   font-mode=system, font-body=A;B;C, font-code=X;Y;A;B;C
-#let font-mode = sys.inputs.at("font-mode", default: "project")
-#let input-font-list(name) = sys.inputs.at(name, default: "").split(";").filter(it => it != "")
-#let system-font-body = input-font-list("font-body")
-#let system-font-code = input-font-list("font-code")
-#let font-zh = if font-mode == "system" { system-font-body } else { "Noto Sans SC" }
-
-// 代码（代码块与行内代码）：Noto Sans Mono 首选 + Noto Sans Mono CJK SC 回退。
-//
-// 为什么是两个字体组成的栈：
-//   * 首选 Noto Sans Mono 是纯拉丁等宽，它的 U+2500 系制表符是**半宽**
-//     （与 ASCII 完全等宽），所以代码块里 `├──` 正好占 3 个 ASCII 格、树与
-//     `#` 注释列落在 ASCII 网格上；
-//   * 它不含汉字，所以代码里的中文由回退字体 Noto Sans Mono CJK SC 提供
-//     （等宽中文 = 2 个 ASCII 格，与它自己的全角网格一致）。
-//   注意：Noto Sans Mono CJK SC **自己**的制表符是全宽的（2 格），但首选字体
-//   已经命中那些码位，所以永远不会走到它的制表符 —— 这一点实测确认过。
-//   （实测：`├`/`─` 与 ASCII 同为 5.1pt@8.5pt，`中` 为 8.5pt。）
-#let font-mono = if font-mode == "system" { system-font-code } else { "Noto Sans Mono" }
-#let font-mono-cjk = "Noto Sans Mono CJK SC"
-
-// 最后兜底：拉丁 Noto Sans。**必须放在每个字体栈的末尾。**
-//
-// 为什么需要它：书里有一个字符 U+0131（无点 i `ı`，见 11-wm-operators.typ:2021
-// 讲土耳其语 locale 的那个例子 —— 无点 i 正是该例存在的理由）**不在 Noto Sans SC
-// 里**。少了这一项时 `ı` 不会变成缺字方框：实测 Typst 仍会从 `--font-path` 目录里
-// 自动挑一个覆盖它的字体（结果同样是 Noto Sans），但挑哪一个由 Typst 的兜底顺序决定，
-// 不受我们控制；而**只要去掉 --ignore-embedded-fonts**，Typst 内置的 Libertinus 就会
-// 顶上来（实测：那次编译的 PDF 里立刻出现 LibertinusSerif-Regular）。显式把 Noto Sans
-// 放进栈里，字体就全部由我们自己 pin，与参数组合无关，PDF 里不会再出现 Libertinus。
-// （实测补充：当前书稿里 U+0131 只出现在行内代码中，而 Noto Sans Mono 自己含该字符，
-// 所以最终 PDF 的 pdffonts 里其实没有 NotoSans —— 这个兜底是保险，不是当前必需。）
-// 放在末尾**不影响任何现有排版** —— 前面的字体命中了就用不到它。
-#let font-fallback = "Noto Sans"
-
-// 正文用的字体栈。
-#let font-body = if font-mode == "system" { system-font-body } else { (font-zh, font-fallback) }
-
-// 代码统一使用的字体栈：拉丁等宽 + 等宽中文回退 + 拉丁兜底。
-#let font-code = if font-mode == "system" {
-  system-font-code
-} else {
-  (font-mono, font-mono-cjk, font-fallback)
+// 字体槽位由两份 JSON 配置之一提供：
+//   * fonts/noto.json             项目字体的正文/代码字体栈；
+//   * fonts/system-fallbacks.json 不同系统的候选 fallback chain。
+// 默认直接读取 Noto 配置。`--use-system-fonts` 由构建脚本选择系统配置、枚举本机实际安装
+// 的字体，再通过 Typst 原生的 `sys.inputs` 传入已解析的正文与代码字体栈。
+#let font-config-path = sys.inputs.at("font-config", default: "fonts/noto.json")
+#let font-config = json(font-config-path)
+#let configured-font-list(name, default: ()) = {
+  let encoded = sys.inputs.at(name, default: "")
+  if encoded == "" { default } else { encoded.split(";").filter(it => it != "") }
 }
+#let font-body = configured-font-list("font-body", default: font-config.at("body", default: ()))
+#let font-code = configured-font-list("font-code", default: font-config.at("code", default: ()))
+#assert(font-body.len() > 0, message: "font configuration produced an empty body slot")
+#assert(font-code.len() > 0, message: "font configuration produced an empty code slot")
+
+// font-zh / font-mono 是面向既有图表与助手函数的语义名称；两者分别指向完整槽位。
+// Typst 会按数组顺序寻找包含目标字形的第一个字体族。
+#let font-zh = font-body
+#let font-mono = font-code
 
 // Cetz currently targets paged output. The HTML build pre-renders every maintained
 // diagram to build/res/fig-*.svg, then this helper emits a semantic external image.

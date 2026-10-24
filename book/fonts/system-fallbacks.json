@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "mode": "system",
+  "append_body_to_code": true,
+  "platforms": {
+    "windows": {
+      "body": [
+        "Microsoft YaHei",
+        "Microsoft YaHei UI",
+        "DengXian",
+        "SimHei",
+        "Arial"
+      ],
+      "code": [
+        "Cascadia Mono",
+        "Cascadia Code",
+        "Consolas",
+        "Source Code Pro",
+        "Courier New"
+      ]
+    },
+    "macos": {
+      "body": [
+        "PingFang SC",
+        "Hiragino Sans GB",
+        "Heiti SC",
+        "Songti SC",
+        "Arial Unicode MS",
+        "Helvetica",
+        "Arial"
+      ],
+      "code": [
+        "SF Mono",
+        "Menlo",
+        "Monaco",
+        "Courier New"
+      ]
+    },
+    "linux": {
+      "body": [
+        "Noto Sans CJK SC",
+        "Noto Sans SC",
+        "Source Han Sans SC",
+        "WenQuanYi Micro Hei",
+        "WenQuanYi Zen Hei",
+        "DejaVu Sans",
+        "Liberation Sans"
+      ],
+      "code": [
+        "Noto Sans Mono",
+        "Source Code Pro",
+        "DejaVu Sans Mono",
+        "Liberation Mono",
+        "Ubuntu Mono"
+      ]
+    }
+  }
+}

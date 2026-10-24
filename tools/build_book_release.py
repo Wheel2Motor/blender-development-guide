@@ -43,7 +43,7 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="also run the slow per-page render and overflow scan",
+        help="also validate pinned source references and run the per-page overflow scan",
     )
     args = parser.parse_args()
 

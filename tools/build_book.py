@@ -4,7 +4,7 @@
 
 做三件事：
 
-1. 默认用绝对路径和项目固定字体运行 Typst，完全不看系统字体，因此构建可复现、
+1. 默认用绝对路径和项目配置字体运行 Typst，完全不看系统字体，因此构建可复现、
    也不会回退到系统里的商业字体；可选 ``--use-system-fonts`` 会枚举本机字体，并从
    当前平台的候选列表中选择真实存在的正文与等宽字体；
 2. PDF 直接编译；HTML 会先把维护于 ``book/figures`` 的 Cetz 图预渲染为
@@ -12,20 +12,24 @@
 3. 成功后打印**产物的绝对路径**、文件大小、PDF 页数（``pdfinfo``，没有就跳过），
    以及 Typst 的 error / warning 计数；PDF 要求零诊断，HTML 只放行上游明确的
    实验导出警告；
-4. 可选 ``--check``：构建后逐页渲染 PNG，跑 ``tools/check_overflow.py`` 扫版心溢出，
-   最后删掉 ``book/build/page-*.png``。默认**不跑**（很慢，约十分钟）。
+4. 可选 ``--check``：构建前用钉住版本的 Blender 源码核对全部 ``#src(...)`` 引用，
+   构建后逐页渲染 PNG，跑 ``tools/check_overflow.py`` 扫版心溢出，最后删掉
+   ``book/build/page-*.png``。默认**不跑**（很慢，约十分钟）。
 
 环境边界：本脚本**只检查、不安装**任何工具。Typst 缺失时打印官方安装方式并非零退出
 （**不会**下载 Typst，也不会往 ``tools/bin/`` 放东西）；``pdfinfo`` 与 Pillow 是可选
 依赖，缺失时分别只降级"页数报告"与"``--check`` 的溢出扫描"，不影响普通构建。
-字体同样只按 manifest 核验，不在构建过程中下载或修复；缺失时引导运行
-``scons init-book``。输出目录 ``book/build/`` 在工程内。
+普通构建不读取也不要求 ``blender/``；只有 ``--check`` 要求该目录存在、是可读的 Git
+检出，并与 ``book/blender-baseline.json`` 中的固定提交一致。
+项目字体构建只要求 ``book/fonts/`` 中存在 Typst 可扫描的字体，不校验哈希或版本，
+也不在构建过程中下载或修复；缺失时引导运行 ``scons init-book``。输出目录
+``book/build/`` 在工程内。
 
 用法::
 
     python tools/build_book.py            # 只构建并报告
     python tools/build_book.py --format html
-    python tools/build_book.py --check    # 构建 + 逐页渲染 + 版心溢出扫描
+    python tools/build_book.py --check    # 源码引用核对 + 构建 + 逐页渲染与溢出扫描
     python tools/build_book.py --use-system-fonts
 
 注意：本脚本打印到控制台的一切文字都是英文 —— Windows 控制台默认代码页是 GBK，
@@ -45,6 +49,15 @@ import sys
 import tempfile
 import time
 
+from font_config import (
+    NOTO_CONFIG,
+    SYSTEM_CONFIG,
+    load_noto_config,
+    load_system_config,
+    platform_key,
+    typst_relative,
+)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BOOK = os.path.join(ROOT, "book")
 BUILD = os.path.join(BOOK, "build")
@@ -57,8 +70,10 @@ OUTPUTS = {
 }
 FIGURES = os.path.join(BOOK, "figures")
 OVERFLOW = os.path.join(ROOT, "tools", "check_overflow.py")
+SOURCE_REFS = os.path.join(ROOT, "qa", "check_source_refs.py")
 # 默认字体由工程自带（book/fonts/，由 tools/init_book.py 下载），构建完全不看系统字体。
 FONTS = os.path.join(BOOK, "fonts")
+FONT_SUFFIXES = (".ttf", ".otf", ".ttc", ".otc")
 
 # Typst 的字体相关参数，含义见 doc/README-BOOK.md「字体」一节：
 #   --font-path             指向工程字体目录；
@@ -68,56 +83,17 @@ FONTS = os.path.join(BOOK, "fonts")
 #                           而不是被 DejaVu / Libertinus 悄悄顶掉。
 PROJECT_FONT_ARGS = [
     "--font-path", FONTS, "--ignore-system-fonts", "--ignore-embedded-fonts",
+    "--input", "font-config=" + typst_relative(NOTO_CONFIG),
 ]
 
-# ``--use-system-fonts`` 只从当前系统中实际存在的字体里选取候选，避免把不存在的
-# family 传给 Typst 并产生 warning。代码字体末尾追加正文字体，给中文注释兜底。
-SYSTEM_FONT_CANDIDATES = {
-    "windows": {
-        "body": (
-            "Microsoft YaHei", "Microsoft YaHei UI", "DengXian", "SimHei", "Arial",
-        ),
-        "code": (
-            "Cascadia Mono", "Cascadia Code", "Consolas", "Source Code Pro",
-            "Courier New",
-        ),
-    },
-    "macos": {
-        "body": (
-            "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Songti SC",
-            "Arial Unicode MS", "Helvetica", "Arial",
-        ),
-        "code": ("SF Mono", "Menlo", "Monaco", "Courier New"),
-    },
-    "linux": {
-        "body": (
-            "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC",
-            "WenQuanYi Micro Hei", "WenQuanYi Zen Hei", "DejaVu Sans", "Liberation Sans",
-        ),
-        "code": (
-            "Noto Sans Mono", "Source Code Pro", "DejaVu Sans Mono",
-            "Liberation Mono", "Ubuntu Mono",
-        ),
-    },
-}
-
-# 网页版使用自定义 family 名，避免与浏览器所在机器恰好安装的同名字体发生歧义。
-HTML_FONT_FACES = (
-    ("NotoSansSC-Regular.otf", "Book Noto Sans SC", 400),
-    ("NotoSansSC-Bold.otf", "Book Noto Sans SC", 700),
-    ("NotoSans-Regular.ttf", "Book Noto Sans", 400),
-    ("NotoSans-Bold.ttf", "Book Noto Sans", 700),
-    ("NotoSansMono-Regular.ttf", "Book Noto Sans Mono", 400),
-    ("NotoSansMono-Bold.ttf", "Book Noto Sans Mono", 700),
-    ("NotoSansMonoCJKsc-Regular.otf", "Book Noto Sans Mono CJK SC", 400),
-    ("NotoSansMonoCJKsc-Bold.otf", "Book Noto Sans Mono CJK SC", 700),
-)
-HTML_FONT_LICENSES = (
-    "LICENSE-NotoSansMonoCJK.txt",
-    "LICENSE-NotoSansSC.txt",
-    "OFL-NotoSans.txt",
-    "OFL-NotoSansMono.txt",
-)
+try:
+    NOTO_FONT_CONFIG = load_noto_config()
+    SYSTEM_FONT_CONFIG = load_system_config()
+    FONT_CONFIG_ERROR = None
+except ValueError as exc:
+    NOTO_FONT_CONFIG = {}
+    SYSTEM_FONT_CONFIG = {}
+    FONT_CONFIG_ERROR = str(exc)
 
 OK, BAD, INFO = "[ OK ]", "[FAIL]", "[ .. ]"
 
@@ -173,20 +149,32 @@ def text_of(cp: subprocess.CompletedProcess) -> str:
     return out.decode("utf-8", errors="replace")
 
 
+def verify_source_references() -> bool:
+    """Validate every #src reference against the pinned Blender checkout.
+
+    This intentionally belongs to ``--check`` rather than the plain build: readers who
+    only want the rendered book must not need the large Blender source checkout.
+    """
+    print()
+    print("== Verification: source references against pinned Blender revision ==")
+    say(INFO, "--check requires ./blender at the commit pinned by the book.")
+    sys.stdout.flush()
+    cp = run([sys.executable, SOURCE_REFS], cwd=ROOT, stream=True)
+    if cp.returncode != 0:
+        say(BAD, "Source-reference verification failed.")
+        say(INFO, "Run 'scons init-blender' to prepare the pinned checkout, or use")
+        say(INFO, "plain 'scons build-book' when you only need to render the book.")
+        return False
+    say(OK, "Source references match the pinned Blender checkout.")
+    return True
+
+
 def find_typst() -> str | None:
     local = os.path.join(ROOT, "tools", "bin", "typst")
     for cand in (local, local + ".exe"):
         if os.path.isfile(cand):
             return cand
     return shutil.which("typst")
-
-
-def platform_key() -> str:
-    if sys.platform == "win32":
-        return "windows"
-    if sys.platform == "darwin":
-        return "macos"
-    return "linux"
 
 
 def select_system_fonts(exe: str) -> tuple[list[str], list[str]] | None:
@@ -204,7 +192,7 @@ def select_system_fonts(exe: str) -> tuple[list[str], list[str]] | None:
         for line in text_of(cp).splitlines()
         if line.strip()
     }
-    candidates = SYSTEM_FONT_CANDIDATES[platform_key()]
+    candidates = SYSTEM_FONT_CONFIG["platforms"][platform_key()]
 
     def available(names: tuple[str, ...]) -> list[str]:
         return [installed[name.casefold()] for name in names if name.casefold() in installed]
@@ -221,24 +209,28 @@ def select_system_fonts(exe: str) -> tuple[list[str], list[str]] | None:
         return None
 
     # 等宽字体通常不含 CJK；把正文字体追加为代码中文的显式回退。
-    code = mono + [name for name in body if name not in mono]
+    code = list(mono)
+    if SYSTEM_FONT_CONFIG.get("append_body_to_code", False):
+        code.extend(name for name in body if name not in code)
     return body, code
 
 
-def system_font_args(exe: str) -> list[str] | None:
+def system_font_args(exe: str) -> tuple[list[str], list[str], list[str]] | None:
     selected = select_system_fonts(exe)
     if selected is None:
         return None
     body, code = selected
     say(OK, "System body fonts: %s" % " -> ".join(body))
     say(OK, "System code fonts: %s" % " -> ".join(code))
-    say(INFO, "System-font mode is machine-dependent; use pinned project fonts for releases.")
-    return [
+    say(INFO, "System-font mode is machine-dependent; use configured Noto fonts for releases.")
+    args = [
         "--ignore-embedded-fonts",
-        "--input", "font-mode=system",
+        "--input", "font-config=" + typst_relative(SYSTEM_CONFIG),
+        "--input", "font-platform=" + platform_key(),
         "--input", "font-body=" + ";".join(body),
         "--input", "font-code=" + ";".join(code),
     ]
+    return args, body, code
 
 
 def count_diagnostics(out: str) -> tuple[int, int]:
@@ -264,9 +256,7 @@ def reset_html_resources() -> bool:
         os.makedirs(HTML_RES, exist_ok=True)
         for entry in os.scandir(HTML_RES):
             if entry.is_file() and entry.name.lower().endswith(
-                    (".svg", ".ttf", ".otf", ".ttc", ".otc")):
-                os.remove(entry.path)
-            elif entry.is_file() and entry.name in HTML_FONT_LICENSES:
+                    (".svg", ".ttf", ".otf", ".ttc", ".otc", ".txt")):
                 os.remove(entry.path)
     except OSError as exc:
         say(BAD, "Could not reset HTML resources in %s: %s" % (HTML_RES, exc))
@@ -274,52 +264,144 @@ def reset_html_resources() -> bool:
     return True
 
 
-def copy_html_fonts() -> bool:
-    """Copy the pinned web font files after the manifest preflight has passed."""
+def discover_project_font_faces(exe: str, families: list[str]) -> list[dict] | None:
+    """Ask Typst which files and variants back the configured project families."""
+    cp = run([
+        exe, "fonts", "--font-path", FONTS,
+        "--ignore-system-fonts", "--ignore-embedded-fonts", "--variants",
+    ], cwd=ROOT, stream=False)
+    if cp.returncode != 0:
+        say(BAD, "Could not enumerate project font variants with 'typst fonts'.")
+        out = text_of(cp).strip()
+        if out:
+            print(out)
+        return None
+
+    wanted = {family.casefold() for family in families}
+    current_family = ""
+    pending_path: str | None = None
+    faces: list[dict] = []
+    for raw_line in text_of(cp).splitlines():
+        if raw_line and not raw_line[0].isspace():
+            current_family = raw_line.strip()
+            pending_path = None
+            continue
+        path_match = re.match(r"^\s*[├└](?:─)?\s+(.+?)\s*$", raw_line)
+        if path_match:
+            pending_path = path_match.group(1)
+            continue
+        variant_match = re.match(
+            r"^\s*(?:│\s*)?Style:\s*([^,]+),\s*Weight:\s*(\d+),\s*Stretch:",
+            raw_line)
+        if not variant_match or not pending_path or current_family.casefold() not in wanted:
+            continue
+        source = pending_path
+        if not os.path.isabs(source):
+            source = os.path.join(ROOT, source)
+        source = os.path.normpath(source)
+        if not os.path.isfile(source):
+            say(BAD, "Typst reported a project font path that does not exist: %s" % source)
+            return None
+        style_name = variant_match.group(1).strip().casefold()
+        style = "italic" if "italic" in style_name else (
+            "oblique" if "oblique" in style_name else "normal")
+        faces.append({
+            "family": current_family,
+            "source": source,
+            "style": style,
+            "weight": int(variant_match.group(2)),
+        })
+
+    discovered = {face["family"].casefold() for face in faces}
+    missing = [family for family in families if family.casefold() not in discovered]
+    if missing:
+        say(BAD, "Typst could not find configured project font families: %s"
+            % ", ".join(missing))
+        say(INFO, "List recognized names with:")
+        say(INFO, "  typst fonts --font-path book/fonts --ignore-system-fonts")
+        return None
+    return faces
+
+
+def copy_html_fonts(exe: str, families: list[str]) -> list[dict] | None:
+    """Discover and copy configured project fonts for the experimental HTML export."""
+    faces = discover_project_font_faces(exe, families)
+    if faces is None:
+        return None
+
+    copied: dict[str, str] = {}
+    used_names: set[str] = set()
+
+    def destination_name(source: str) -> str:
+        if source in copied:
+            return copied[source]
+        basename = os.path.basename(source)
+        stem, suffix = os.path.splitext(basename)
+        candidate = basename
+        index = 2
+        while candidate.casefold() in used_names:
+            candidate = "%s-%d%s" % (stem, index, suffix)
+            index += 1
+        copied[source] = candidate
+        used_names.add(candidate.casefold())
+        return candidate
+
     try:
-        for filename, _family, _weight in HTML_FONT_FACES:
-            source = os.path.join(FONTS, filename)
-            if not os.path.isfile(source):
-                say(BAD, "Pinned HTML font is missing after preflight: %s" % source)
-                return False
-            shutil.copy2(source, os.path.join(HTML_RES, filename))
-        for filename in HTML_FONT_LICENSES:
-            source = os.path.join(FONTS, filename)
-            if not os.path.isfile(source):
-                say(BAD, "Pinned HTML font license is missing: %s" % source)
-                return False
-            shutil.copy2(source, os.path.join(HTML_RES, filename))
+        for face in faces:
+            target = destination_name(face["source"])
+            if not os.path.isfile(os.path.join(HTML_RES, target)):
+                shutil.copy2(face["source"], os.path.join(HTML_RES, target))
+            face["file"] = target
+        license_count = 0
+        for base, _dirs, files in os.walk(FONTS):
+            for filename in files:
+                if not filename.lower().endswith(".txt"):
+                    continue
+                source = os.path.join(base, filename)
+                target = destination_name(source)
+                shutil.copy2(source, os.path.join(HTML_RES, target))
+                license_count += 1
     except OSError as exc:
         say(BAD, "Could not copy HTML fonts into %s: %s" % (HTML_RES, exc))
-        return False
-    say(OK, "Copied %d pinned font file(s) and %d license file(s) into %s."
-        % (len(HTML_FONT_FACES), len(HTML_FONT_LICENSES), HTML_RES))
-    return True
+        return None
+    say(OK, "Copied %d project font file(s) and %d text license file(s) into %s."
+        % (len(copied) - license_count, license_count, HTML_RES))
+    return faces
 
 
-def html_font_css(use_system_fonts: bool) -> str:
-    """Build the generated @font-face prefix; system mode intentionally has none."""
-    if use_system_fonts:
-        return ""
+def css_stack(names: list[str]) -> str:
+    generic = {"serif", "sans-serif", "monospace", "system-ui"}
+    return ", ".join(
+        name if name in generic else '"%s"' % name.replace("\\", "\\\\").replace('"', '\\"')
+        for name in names)
 
+
+def html_font_css(use_system_fonts: bool, faces: list[dict],
+                  body_fonts: list[str], code_fonts: list[str]) -> str:
+    """Build web-font faces and CSS slots from the selected font configuration."""
     rules = []
-    for filename, family, weight in HTML_FONT_FACES:
-        font_format = "opentype" if filename.lower().endswith(".otf") else "truetype"
-        rules.append(
-            '@font-face {\n'
-            '  font-family: "%s";\n'
-            '  src: url("res/%s") format("%s");\n'
-            '  font-style: normal;\n'
-            '  font-weight: %d;\n'
-            '  font-display: swap;\n'
-            '}' % (family, filename, font_format, weight)
-        )
+    if not use_system_fonts:
+        for face in faces:
+            filename = face["file"]
+            family = face["family"]
+            weight = face["weight"]
+            style = face["style"]
+            rules.append(
+                '@font-face {\n'
+                '  font-family: "%s";\n'
+                '  src: url("res/%s");\n'
+                '  font-style: %s;\n'
+                '  font-weight: %d;\n'
+                '  font-display: swap;\n'
+                '}' % (family.replace("\\", "\\\\").replace('"', '\\"'),
+                       filename, style, weight)
+            )
+
     rules.append(
         ':root {\n'
-        '  --book-font-body: "Book Noto Sans SC", "Book Noto Sans", sans-serif;\n'
-        '  --book-font-code: "Book Noto Sans Mono", '
-        '"Book Noto Sans Mono CJK SC", monospace;\n'
-        '}'
+        '  --book-font-body: %s;\n'
+        '  --book-font-code: %s;\n'
+        '}' % (css_stack(body_fonts), css_stack(code_fonts))
     )
     return "\n\n".join(rules) + "\n\n"
 
@@ -487,7 +569,9 @@ def build_html_figures(exe: str, font_args: list[str]) -> bool:
     return True
 
 
-def embed_html_style(path: str, use_system_fonts: bool) -> bool:
+def embed_html_style(path: str, use_system_fonts: bool,
+                     faces: list[dict], body_fonts: list[str],
+                     code_fonts: list[str]) -> bool:
     """Embed the maintained stylesheet and generated web-font declarations."""
     try:
         with open(HTML_STYLE, encoding="utf-8") as fh:
@@ -508,7 +592,8 @@ def embed_html_style(path: str, use_system_fonts: bool) -> bool:
         say(BAD, "Could not embed the stylesheet: generated HTML has no </head> element.")
         return False
 
-    combined_css = html_font_css(use_system_fonts) + css
+    combined_css = html_font_css(
+        use_system_fonts, faces, body_fonts, code_fonts) + css
     style = '\n<style data-source="book/html/style.css">\n%s\n</style>\n' % combined_css
     document = document.replace("</head>", style + "</head>", 1)
     temporary = None
@@ -574,11 +659,11 @@ def ensure_pillow() -> bool:
 
 
 def verify_project_fonts() -> bool:
-    """Strict, read-only font preflight for builds.
+    """Read-only configured-font preflight for builds.
 
     Downloading belongs exclusively to init_book.py. A build must never mutate
-    its inputs or silently accept an unpinned font, so it uses check-only mode
-    and stops with the platform entry points when preparation is required.
+    its inputs, so it uses check-only mode and stops with the platform entry
+    points when no usable project-font input has been prepared.
     """
     try:
         from init_book import check_fonts
@@ -588,14 +673,13 @@ def verify_project_fonts() -> bool:
 
     if check_fonts(
             check_only=True,
-            force=False,
-            heading="== Preflight: pinned project fonts (no downloads) =="):
+            heading="== Preflight: configured project fonts (no downloads) =="):
         return True
 
-    say(BAD, "Book fonts are missing, invalid, or do not match the pinned manifest.")
+    say(BAD, "Project fonts are not prepared for the selected slot configuration.")
     say(INFO, "The build never downloads or repairs fonts. Prepare them first:")
     say(INFO, "  scons init-book")
-    say(INFO, "Then re-run this build command; no manual file copying is required.")
+    say(INFO, "You may also copy supported font files into book/fonts/ and edit noto.json.")
     return False
 
 
@@ -604,11 +688,11 @@ def main() -> int:
     ap.add_argument("--format", choices=("pdf", "html"), default="pdf",
                     help="output format (default: pdf; html is experimental)")
     ap.add_argument("--check", "--verify", dest="check", action="store_true",
-                    help="after building, render every page and scan for margin overflow "
-                         "(slow, about ten minutes)")
+                    help="validate source references against the pinned Blender checkout, "
+                         "then render every PDF page and scan for margin overflow")
     ap.add_argument("--use-system-fonts", action="store_true",
                     help="use an OS-specific list of installed fallback fonts instead of "
-                         "the pinned project fonts (not reproducible; not for releases)")
+                         "the configured Noto fonts (not reproducible; not for releases)")
     args = ap.parse_args()
 
     if args.format == "html" and args.check:
@@ -625,7 +709,7 @@ def main() -> int:
     print("Output       : %s" % output)
     print("Verify       : %s" % ("yes (--check)" if args.check else "no"))
     print("Fonts        : %s" % ("system fallbacks" if args.use_system_fonts
-                                 else "pinned project fonts"))
+                                 else "configured Noto fonts"))
     print("=" * 70)
 
     if not os.path.isfile(MAIN):
@@ -633,6 +717,12 @@ def main() -> int:
         return 1
     if args.format == "html" and not os.path.isfile(HTML_STYLE):
         say(BAD, "HTML stylesheet not found: %s" % HTML_STYLE)
+        return 1
+    if FONT_CONFIG_ERROR:
+        say(BAD, "Font configuration is invalid: %s" % FONT_CONFIG_ERROR)
+        return 1
+
+    if args.check and not verify_source_references():
         return 1
 
     exe = find_typst()
@@ -654,26 +744,42 @@ def main() -> int:
         say(OK, "Created output directory: %s" % BUILD)
 
     if args.use_system_fonts:
-        font_args = system_font_args(exe)
-        if font_args is None:
+        selected_system = system_font_args(exe)
+        if selected_system is None:
             return 1
+        font_args, html_body_fonts, html_code_fonts = selected_system
+        html_body_fonts = html_body_fonts + ["system-ui", "sans-serif"]
+        html_code_fonts = html_code_fonts + ["monospace"]
+        html_font_faces: list[dict] = []
     else:
         # 项目字体必须已经由 init-book 备好；构建只读核验，不下载、不修复。
         if not verify_project_fonts():
             return 1
-        font_files = [f for f in sorted(os.listdir(FONTS))
-                      if f.lower().endswith((".ttf", ".otf", ".ttc", ".otc"))]
+        font_files = [
+            os.path.join(base, filename)
+            for base, _dirs, files in os.walk(FONTS)
+            for filename in files
+            if filename.lower().endswith(FONT_SUFFIXES)
+        ]
         say(OK, "Using %d project font file(s) from %s; system fonts are ignored."
             % (len(font_files), FONTS))
         font_args = PROJECT_FONT_ARGS
+        html_body_fonts = list(NOTO_FONT_CONFIG["body"]) + ["sans-serif"]
+        html_code_fonts = list(NOTO_FONT_CONFIG["code"]) + ["monospace"]
+        html_font_faces = []
 
     if args.format == "html":
         if not reset_html_resources():
             return 1
         if not build_html_figures(exe, font_args):
             return 1
-        if not args.use_system_fonts and not copy_html_fonts():
-            return 1
+        if not args.use_system_fonts:
+            families = list(dict.fromkeys(
+                NOTO_FONT_CONFIG["body"] + NOTO_FONT_CONFIG["code"]))
+            copied_faces = copy_html_fonts(exe, families)
+            if copied_faces is None:
+                return 1
+            html_font_faces = copied_faces
         if args.use_system_fonts:
             say(INFO, "System-font mode selected; no font files were copied to build/res.")
 
@@ -709,7 +815,8 @@ def main() -> int:
         and (warnings == 0 or (args.format == "html" and not unexpected_warnings))
     )
     if diagnostics_acceptable and args.format == "html":
-        if not embed_html_style(output, args.use_system_fonts):
+        if not embed_html_style(output, args.use_system_fonts, html_font_faces,
+                                html_body_fonts, html_code_fonts):
             return 1
 
     size = os.path.getsize(output)
