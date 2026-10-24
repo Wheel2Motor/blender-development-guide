@@ -179,7 +179,7 @@
   breakable: true,
 )[#set text(font: font-code, size: 8.2pt, weight: 400); #it]
 
-// 行内代码：换字体与颜色，并【制造断行机会】。
+// 行内代码：换字体与颜色、增加淡背景，并【制造断行机会】。
 //
 // 为什么必须这么做：像 source/blender/blenkernel/BKE_lib_id.hh:120 这样的长路径
 // 在 Typst 里默认只能在少数几个字符后断行，于是它的「最小内容宽度」非常大。
@@ -195,7 +195,13 @@
     parts.push(c)
     if c in ("/", "_", "-", ".", ":") { parts.push("\u{200B}") }
   }
-  text(font: font-code, size: 0.93em, fill: luma(12%))[#parts.join()]
+  highlight(
+    fill: rgb("#f2f4f7"),
+    radius: 1.5pt,
+    extent: 1.2pt,
+  )[
+    #text(font: font-code, size: 0.93em, fill: luma(12%))[#parts.join()]
+  ]
 }
 
 // 高密度对照表统一略小于正文；标题与强调仍可覆盖字重。
