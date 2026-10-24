@@ -1611,7 +1611,7 @@ PROBE_EXPORT int PROBE_CALL probe_bounds(const float *coords,
 完整的源码还包含用于演示 GIL 的 `probe_busy_work`，同目录的
 `probe_native.py` 给出全部 `ctypes` 签名，`probe_native_test.py` 负责数值与错误路径验证。
 
-这段代码里的每一条约定都不是装饰，它们各自对应一类跨边界的经典故障：
+这些约定分别用于避免一类常见的跨边界故障：
 
 #figure(
   kind: table,
@@ -1622,13 +1622,13 @@ PROBE_EXPORT int PROBE_CALL probe_bounds(const float *coords,
     stroke: 0.4pt + luma(78%),
     table.header([*约定*], [*不遵守会怎样*]),
     [`extern "C"` / `#[no_mangle]`], [C++ 编译器会做名字修饰（name mangling），`ctypes` 按原名找不到符号，报 `AttributeError: function 'foo' not found`],
-    [`uint32_t` / `size_t` 等定宽类型], [`int` 在不同平台未必同宽；`long` 在 Windows 是 32 位、在 Linux 是 64 位，这是最阴的一类 bug],
+    [`uint32_t` / `size_t` 等定宽类型], [`int` 在不同平台未必同宽；`long` 在 Windows 是 32 位、在 Linux 是 64 位，这类差异很隐蔽],
     [`PROBE_CALL`（`__cdecl`）], [Windows 上 32 位程序的默认调用约定可能是 `__stdcall`，参数被错误地弹栈。64 位下两者统一，所以这个 bug 只在 32 位目标上出现],
     [参数非空与范围自检], [`ctypes` 传来的指针不会自动校验。一次空指针解引用会让*整个 Blender* 崩溃，而不是抛异常],
     [不做 I/O、不打印], [标准输出在无界面模式下可能不可用；而且日志会与 Blender 自己的输出交错],
-    [由调用方分配内存], [谁分配谁释放是唯一不会出错的所有权规则。跨 DLL 边界的 `free()` 在 Windows 上可能因 CRT 不同而崩溃],
+    [由调用方分配内存], [由同一侧分配和释放内存可避免跨模块释放；跨 DLL 边界的 `free()` 在 Windows 上可能因 CRT 不同而崩溃],
   ),
-  caption: [C ABI 的六条铁律，以及违反它们的实际后果],
+  caption: [C ABI 的六项关键约定及不遵守时的实际后果],
 ) <tbl-cabi-rules>
 
 === 6.6.4 Python 侧：`ctypes` 的正确声明方式
